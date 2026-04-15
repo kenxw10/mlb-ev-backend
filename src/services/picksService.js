@@ -98,9 +98,9 @@ async function getPicksForDate(date) {
     gameCount: gamesWithOdds.length,
     oddsMatchedCount,
     evaluatedGameCount: evaluatedGames.length,
-    positiveEvPickCount: positiveEvPicks.length,
+    rankedPickCount: positiveEvPicks.length,
     topPicks: positiveEvPicks.slice(0, 4),
-    message: "Moneyline EV model applied."
+    message: "Moneyline EV model applied with filtering and data-quality guardrails."
   };
 }
 
