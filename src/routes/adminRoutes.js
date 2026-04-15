@@ -6,6 +6,13 @@ const {
   getSnapshotCoverageSummary
 } = require("../services/pickGradingService");
 const { getCalibrationSummary } = require("../services/calibrationSummaryService");
+const {
+  LOCK_WINDOWS,
+  getEasternDateString,
+  getYesterdayEasternDateString,
+  runOfficialLockForDateWindow,
+  runOfficialGradeForDate
+} = require("../services/officialAutomationService");
 
 const router = express.Router();
 
@@ -81,6 +88,64 @@ router.get("/calibration-summary", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to build calibration summary."
+    });
+  }
+});
+
+router.get("/official-lock", async (req, res) => {
+  try {
+    const requestedDate =
+      typeof req.query.date === "string" && req.query.date.trim()
+        ? req.query.date.trim()
+        : getEasternDateString();
+
+    const lockWindow =
+      typeof req.query.window === "string" ? req.query.window.trim() : "";
+
+    if (!isValidDateString(requestedDate)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid date query parameter is required in YYYY-MM-DD format."
+      });
+    }
+
+    if (!LOCK_WINDOWS[lockWindow]) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid window query parameter is required: early, main, or late."
+      });
+    }
+
+    const result = await runOfficialLockForDateWindow(requestedDate, lockWindow);
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to run official lock."
+    });
+  }
+});
+
+router.get("/official-grade", async (req, res) => {
+  try {
+    const requestedDate =
+      typeof req.query.date === "string" && req.query.date.trim()
+        ? req.query.date.trim()
+        : getYesterdayEasternDateString();
+
+    if (!isValidDateString(requestedDate)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid date query parameter is required in YYYY-MM-DD format."
+      });
+    }
+
+    const result = await runOfficialGradeForDate(requestedDate);
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to run official grade."
     });
   }
 });

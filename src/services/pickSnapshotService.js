@@ -15,6 +15,9 @@ async function ensurePickSnapshotTable() {
       generated_at TIMESTAMPTZ NULL,
       slate_timezone TEXT NULL,
       source_bucket TEXT NULL,
+      snapshot_mode TEXT NULL,
+      official_lock_window TEXT NULL,
+      official_run_id TEXT NULL,
       rank_overall INTEGER NULL,
       rank_within_bucket INTEGER NULL,
       market_type TEXT NOT NULL,
@@ -40,15 +43,11 @@ async function ensurePickSnapshotTable() {
     )
   `);
 
-  await query(`
-    ALTER TABLE pick_snapshots
-    ADD COLUMN IF NOT EXISTS source_bucket TEXT NULL
-  `);
-
-  await query(`
-    ALTER TABLE pick_snapshots
-    ADD COLUMN IF NOT EXISTS rank_within_bucket INTEGER NULL
-  `);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS source_bucket TEXT NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS snapshot_mode TEXT NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS official_lock_window TEXT NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS official_run_id TEXT NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS rank_within_bucket INTEGER NULL`);
 
   return true;
 }
@@ -85,13 +84,17 @@ function buildSnapshotRows(response) {
   return rows;
 }
 
-async function persistServedPickSnapshot(response) {
+async function persistServedPickSnapshot(response, options = {}) {
   if (!isDatabaseEnabled()) {
     return {
       saved: false,
       reason: "DATABASE_URL not configured"
     };
   }
+
+  const snapshotMode = options.snapshotMode || "adhoc";
+  const officialLockWindow = options.officialLockWindow || null;
+  const officialRunId = options.officialRunId || null;
 
   const rows = buildSnapshotRows(response);
 
@@ -116,6 +119,9 @@ async function persistServedPickSnapshot(response) {
           generated_at,
           slate_timezone,
           source_bucket,
+          snapshot_mode,
+          official_lock_window,
+          official_run_id,
           rank_overall,
           rank_within_bucket,
           market_type,
@@ -142,7 +148,8 @@ async function persistServedPickSnapshot(response) {
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-          $21, $22, $23, $24, $25, $26, $27, $28::jsonb
+          $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+          $31::jsonb
         )
       `,
       [
@@ -152,6 +159,9 @@ async function persistServedPickSnapshot(response) {
         response?.generatedAt || null,
         response?.slateTimezone || null,
         row.sourceBucket,
+        snapshotMode,
+        officialLockWindow,
+        officialRunId,
         row.rankOverall,
         row.rankWithinBucket,
         pick?.marketType || null,

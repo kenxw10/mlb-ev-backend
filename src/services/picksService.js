@@ -73,7 +73,27 @@ function buildOddsMap(oddsEvents, requestedDate) {
   return oddsMap;
 }
 
-async function getPicksForDate(date) {
+function meetsMinMinutesToStart(gameDate, minMinutesToStart) {
+  if (!minMinutesToStart || minMinutesToStart <= 0) {
+    return true;
+  }
+
+  const gameMs = new Date(gameDate).getTime();
+
+  if (Number.isNaN(gameMs)) {
+    return false;
+  }
+
+  return gameMs - Date.now() >= minMinutesToStart * 60 * 1000;
+}
+
+async function getPicksForDate(date, options = {}) {
+  const persistSnapshots = options.persistSnapshots === true;
+  const snapshotMode = options.snapshotMode || "adhoc";
+  const officialLockWindow = options.officialLockWindow || null;
+  const officialRunId = options.officialRunId || null;
+  const minMinutesToStart = options.minMinutesToStart || 0;
+
   const [gamesResponse, oddsEvents] = await Promise.all([
     getGamesForDate(date),
     fetchMlbOdds()
@@ -81,7 +101,7 @@ async function getPicksForDate(date) {
 
   const oddsMap = buildOddsMap(oddsEvents, date);
 
-  const gamesWithOdds = (gamesResponse.games || []).map((game) => {
+  let gamesWithOdds = (gamesResponse.games || []).map((game) => {
     const matchupKey = buildMatchupKey(
       game.awayTeam?.name,
       game.homeTeam?.name
@@ -102,6 +122,10 @@ async function getPicksForDate(date) {
     };
   });
 
+  gamesWithOdds = gamesWithOdds.filter((game) =>
+    meetsMinMinutesToStart(game.gameDate, minMinutesToStart)
+  );
+
   const oddsMatchedCount = gamesWithOdds.filter(
     (game) => game.oddsAvailable
   ).length;
@@ -119,10 +143,16 @@ async function getPicksForDate(date) {
     totalsResults
   });
 
-  try {
-    await persistServedPickSnapshot(response);
-  } catch (error) {
-    console.error("Failed to persist pick snapshots:", error);
+  if (persistSnapshots) {
+    try {
+      await persistServedPickSnapshot(response, {
+        snapshotMode,
+        officialLockWindow,
+        officialRunId
+      });
+    } catch (error) {
+      console.error("Failed to persist pick snapshots:", error);
+    }
   }
 
   return response;

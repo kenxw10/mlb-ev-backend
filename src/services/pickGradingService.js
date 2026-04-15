@@ -258,7 +258,9 @@ async function ensureGradedPickResultsTable() {
   return true;
 }
 
-async function getUngradedSnapshotsForDate(date) {
+async function getUngradedSnapshotsForDate(date, options = {}) {
+  const snapshotMode = options.snapshotMode || null;
+
   const result = await query(
     `
       SELECT
@@ -277,9 +279,10 @@ async function getUngradedSnapshotsForDate(date) {
         ON g.snapshot_id = ps.id
       WHERE ps.requested_date = $1
         AND g.snapshot_id IS NULL
+        AND ($2::text IS NULL OR ps.snapshot_mode = $2)
       ORDER BY ps.saved_at ASC, ps.rank_overall ASC
     `,
-    [date]
+    [date, snapshotMode]
   );
 
   return result?.rows || [];
@@ -347,7 +350,7 @@ async function insertGradedResult(snapshotRow, finalGame, gradeResult) {
   );
 }
 
-async function gradeSnapshotsForDate(date) {
+async function gradeSnapshotsForDate(date, options = {}) {
   if (!isDatabaseEnabled()) {
     return {
       ok: false,
@@ -357,7 +360,7 @@ async function gradeSnapshotsForDate(date) {
 
   await ensureGradedPickResultsTable();
 
-  const ungradedSnapshots = await getUngradedSnapshotsForDate(date);
+  const ungradedSnapshots = await getUngradedSnapshotsForDate(date, options);
   const scheduleData = await fetchScheduleForDate(date);
   const finalGameMap = buildFinalGameMap(date, scheduleData);
 
@@ -397,6 +400,7 @@ async function gradeSnapshotsForDate(date) {
   return {
     ok: true,
     date,
+    snapshotMode: options.snapshotMode || "all",
     ungradedSnapshotCount: ungradedSnapshots.length,
     finalGamesFound: finalGameMap.size,
     gradedCount,
@@ -405,7 +409,7 @@ async function gradeSnapshotsForDate(date) {
   };
 }
 
-async function gradeSnapshotsForDateRange(startDate, endDate) {
+async function gradeSnapshotsForDateRange(startDate, endDate, options = {}) {
   if (!isDatabaseEnabled()) {
     return {
       ok: false,
@@ -417,7 +421,7 @@ async function gradeSnapshotsForDateRange(startDate, endDate) {
   const results = [];
 
   for (const date of dates) {
-    const result = await gradeSnapshotsForDate(date);
+    const result = await gradeSnapshotsForDate(date, options);
     results.push(result);
   }
 
@@ -426,6 +430,7 @@ async function gradeSnapshotsForDateRange(startDate, endDate) {
     startDate,
     endDate,
     dayCount: dates.length,
+    snapshotMode: options.snapshotMode || "all",
     results
   };
 }
@@ -441,13 +446,14 @@ async function getSnapshotCoverageSummary() {
   const result = await query(`
     SELECT
       ps.requested_date,
+      COALESCE(ps.snapshot_mode, 'adhoc') AS snapshot_mode,
       COUNT(*)::int AS snapshot_count,
       COUNT(g.snapshot_id)::int AS graded_count
     FROM pick_snapshots ps
     LEFT JOIN graded_pick_results g
       ON g.snapshot_id = ps.id
-    GROUP BY ps.requested_date
-    ORDER BY ps.requested_date DESC
+    GROUP BY ps.requested_date, COALESCE(ps.snapshot_mode, 'adhoc')
+    ORDER BY ps.requested_date DESC, COALESCE(ps.snapshot_mode, 'adhoc') ASC
   `);
 
   return {
