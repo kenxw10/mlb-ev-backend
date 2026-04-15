@@ -214,6 +214,19 @@ function gradeSnapshot(snapshot, finalGame) {
   return null;
 }
 
+function buildDateRange(startDate, endDate) {
+  const dates = [];
+  const current = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+
+  while (current <= end) {
+    dates.push(current.toISOString().slice(0, 10));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
 async function ensureGradedPickResultsTable() {
   if (!isDatabaseEnabled()) {
     return false;
@@ -257,6 +270,7 @@ async function getUngradedSnapshotsForDate(date) {
         ps.line,
         ps.sportsbook,
         ps.price,
+        ps.rank_overall,
         ps.raw_pick_json
       FROM pick_snapshots ps
       LEFT JOIN graded_pick_results g
@@ -271,7 +285,7 @@ async function getUngradedSnapshotsForDate(date) {
   return result?.rows || [];
 }
 
-async function insertGradedResult(snapshotRow, finalGame, gradeResult, rawPick) {
+async function insertGradedResult(snapshotRow, finalGame, gradeResult) {
   await query(
     `
       INSERT INTO graded_pick_results (
@@ -376,7 +390,7 @@ async function gradeSnapshotsForDate(date) {
       continue;
     }
 
-    await insertGradedResult(snapshotRow, finalGame, gradeResult, rawPick);
+    await insertGradedResult(snapshotRow, finalGame, gradeResult);
     gradedCount += 1;
   }
 
@@ -391,7 +405,60 @@ async function gradeSnapshotsForDate(date) {
   };
 }
 
+async function gradeSnapshotsForDateRange(startDate, endDate) {
+  if (!isDatabaseEnabled()) {
+    return {
+      ok: false,
+      error: "DATABASE_URL not configured."
+    };
+  }
+
+  const dates = buildDateRange(startDate, endDate);
+  const results = [];
+
+  for (const date of dates) {
+    const result = await gradeSnapshotsForDate(date);
+    results.push(result);
+  }
+
+  return {
+    ok: true,
+    startDate,
+    endDate,
+    dayCount: dates.length,
+    results
+  };
+}
+
+async function getSnapshotCoverageSummary() {
+  if (!isDatabaseEnabled()) {
+    return {
+      ok: false,
+      error: "DATABASE_URL not configured."
+    };
+  }
+
+  const result = await query(`
+    SELECT
+      ps.requested_date,
+      COUNT(*)::int AS snapshot_count,
+      COUNT(g.snapshot_id)::int AS graded_count
+    FROM pick_snapshots ps
+    LEFT JOIN graded_pick_results g
+      ON g.snapshot_id = ps.id
+    GROUP BY ps.requested_date
+    ORDER BY ps.requested_date DESC
+  `);
+
+  return {
+    ok: true,
+    dates: result?.rows || []
+  };
+}
+
 module.exports = {
   ensureGradedPickResultsTable,
-  gradeSnapshotsForDate
+  gradeSnapshotsForDate,
+  gradeSnapshotsForDateRange,
+  getSnapshotCoverageSummary
 };
