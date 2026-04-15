@@ -1,6 +1,7 @@
 const express = require("express");
 const { isValidDateString } = require("../utils/dateUtils");
 const { gradeSnapshotsForDate } = require("../services/pickGradingService");
+const { getCalibrationSummary } = require("../services/calibrationSummaryService");
 
 const router = express.Router();
 
@@ -21,6 +22,18 @@ router.get("/grade-results", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to grade results."
+    });
+  }
+});
+
+router.get("/calibration-summary", async (req, res) => {
+  try {
+    const result = await getCalibrationSummary();
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to build calibration summary."
     });
   }
 });
