@@ -14,7 +14,9 @@ async function ensurePickSnapshotTable() {
       requested_date DATE NOT NULL,
       generated_at TIMESTAMPTZ NULL,
       slate_timezone TEXT NULL,
+      source_bucket TEXT NULL,
       rank_overall INTEGER NULL,
+      rank_within_bucket INTEGER NULL,
       market_type TEXT NOT NULL,
       matchup TEXT NULL,
       scheduled_eastern_date DATE NULL,
@@ -38,7 +40,49 @@ async function ensurePickSnapshotTable() {
     )
   `);
 
+  await query(`
+    ALTER TABLE pick_snapshots
+    ADD COLUMN IF NOT EXISTS source_bucket TEXT NULL
+  `);
+
+  await query(`
+    ALTER TABLE pick_snapshots
+    ADD COLUMN IF NOT EXISTS rank_within_bucket INTEGER NULL
+  `);
+
   return true;
+}
+
+function buildSnapshotRows(response) {
+  const rows = [];
+
+  const overallPicks = response?.topPicksOverall || [];
+  for (let index = 0; index < overallPicks.length; index += 1) {
+    rows.push({
+      sourceBucket: "topPicksOverall",
+      rankOverall: index + 1,
+      rankWithinBucket: index + 1,
+      pick: overallPicks[index]
+    });
+  }
+
+  const byMarket = response?.byMarket || {};
+  const marketBuckets = ["moneyline", "runLine", "totals"];
+
+  for (const marketName of marketBuckets) {
+    const picks = byMarket?.[marketName]?.topPicks || [];
+
+    for (let index = 0; index < picks.length; index += 1) {
+      rows.push({
+        sourceBucket: marketName,
+        rankOverall: null,
+        rankWithinBucket: index + 1,
+        pick: picks[index]
+      });
+    }
+  }
+
+  return rows;
 }
 
 async function persistServedPickSnapshot(response) {
@@ -49,9 +93,9 @@ async function persistServedPickSnapshot(response) {
     };
   }
 
-  const picks = response?.topPicksOverall || [];
+  const rows = buildSnapshotRows(response);
 
-  if (picks.length === 0) {
+  if (rows.length === 0) {
     return {
       saved: true,
       count: 0
@@ -60,8 +104,8 @@ async function persistServedPickSnapshot(response) {
 
   const batchId = crypto.randomUUID();
 
-  for (let index = 0; index < picks.length; index += 1) {
-    const pick = picks[index];
+  for (const row of rows) {
+    const pick = row.pick || {};
 
     await query(
       `
@@ -71,7 +115,9 @@ async function persistServedPickSnapshot(response) {
           requested_date,
           generated_at,
           slate_timezone,
+          source_bucket,
           rank_overall,
+          rank_within_bucket,
           market_type,
           matchup,
           scheduled_eastern_date,
@@ -96,7 +142,7 @@ async function persistServedPickSnapshot(response) {
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-          $21, $22, $23, $24, $25, $26::jsonb
+          $21, $22, $23, $24, $25, $26, $27, $28::jsonb
         )
       `,
       [
@@ -105,7 +151,9 @@ async function persistServedPickSnapshot(response) {
         response?.date || null,
         response?.generatedAt || null,
         response?.slateTimezone || null,
-        index + 1,
+        row.sourceBucket,
+        row.rankOverall,
+        row.rankWithinBucket,
         pick?.marketType || null,
         pick?.matchup || null,
         pick?.scheduledEasternDate || null,
@@ -132,7 +180,7 @@ async function persistServedPickSnapshot(response) {
 
   return {
     saved: true,
-    count: picks.length,
+    count: rows.length,
     batchId
   };
 }
