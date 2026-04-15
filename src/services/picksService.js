@@ -4,6 +4,7 @@ const { rankMoneylinePicks } = require("./moneylineModelService");
 const { rankRunLinePicks } = require("./runLineModelService");
 const { rankTotalsPicks } = require("./totalsModelService");
 const { formatPicksResponse } = require("./picksFormatterService");
+const { persistServedPickSnapshot } = require("./pickSnapshotService");
 const {
   buildMatchupKey,
   getEasternDateFromIso
@@ -109,7 +110,7 @@ async function getPicksForDate(date) {
   const runLineResults = rankRunLinePicks(gamesWithOdds);
   const totalsResults = rankTotalsPicks(gamesWithOdds);
 
-  return formatPicksResponse({
+  const response = formatPicksResponse({
     date,
     gameCount: gamesWithOdds.length,
     oddsMatchedCount,
@@ -117,6 +118,14 @@ async function getPicksForDate(date) {
     runLineResults,
     totalsResults
   });
+
+  try {
+    await persistServedPickSnapshot(response);
+  } catch (error) {
+    console.error("Failed to persist pick snapshots:", error);
+  }
+
+  return response;
 }
 
 module.exports = {
