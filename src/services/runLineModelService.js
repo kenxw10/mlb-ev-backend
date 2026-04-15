@@ -11,7 +11,8 @@ const {
   scoreTeam,
   buildMatchupReasoning,
   flipReasoning,
-  getConfidenceTier
+  getConfidenceTier,
+  getGameActionability
 } = require("./modelCoreService");
 
 const MIN_EDGE = 0.02;
@@ -56,6 +57,13 @@ function getBestRunLinePriceForTeam(odds, teamName) {
   }
 
   return best;
+}
+
+function candidatePlaceholder(edge, expectedValueValue) {
+  return {
+    edge: roundNumber(edge, 4),
+    expectedValue: roundNumber(expectedValueValue, 4)
+  };
 }
 
 function evaluateRunLineCandidate(
@@ -108,20 +116,13 @@ function evaluateRunLineCandidate(
   };
 }
 
-function candidatePlaceholder(edge, expectedValueValue) {
-  return {
-    edge: roundNumber(edge, 4),
-    expectedValue: roundNumber(expectedValueValue, 4)
-  };
-}
-
 function shouldRejectGame(game, dataQuality) {
-  const status = String(game?.status || "").toLowerCase();
+  const actionability = getGameActionability(game);
 
-  if (status.includes("final") || status.includes("postponed") || status.includes("cancelled")) {
+  if (!actionability.actionable) {
     return {
       reject: true,
-      reason: "Game status is no longer actionable."
+      reason: actionability.reason
     };
   }
 
@@ -234,6 +235,8 @@ function evaluateGameRunLine(game) {
   return {
     gamePk: game.gamePk,
     gameDate: game.gameDate,
+    scheduledEasternDate: game.scheduledEasternDate,
+    scheduledEasternTime: game.scheduledEasternTime,
     matchup: `${game.awayTeam?.name} at ${game.homeTeam?.name}`,
     awayTeam: game.awayTeam?.name,
     homeTeam: game.homeTeam?.name,

@@ -10,7 +10,8 @@ const {
   buildDataQuality,
   scoreTeam,
   buildMatchupReasoning,
-  getConfidenceTier
+  getConfidenceTier,
+  getGameActionability
 } = require("./modelCoreService");
 
 const MIN_EDGE = 0.02;
@@ -19,12 +20,12 @@ const MIN_DATA_QUALITY = 0.6;
 const TOTAL_SIGMOID_SCALE = 0.90;
 
 function shouldRejectGame(game, dataQuality) {
-  const status = String(game?.status || "").toLowerCase();
+  const actionability = getGameActionability(game);
 
-  if (status.includes("final") || status.includes("postponed") || status.includes("cancelled")) {
+  if (!actionability.actionable) {
     return {
       reject: true,
-      reason: "Game status is no longer actionable."
+      reason: actionability.reason
     };
   }
 
@@ -272,6 +273,8 @@ function evaluateGameTotals(game) {
   return {
     gamePk: game.gamePk,
     gameDate: game.gameDate,
+    scheduledEasternDate: game.scheduledEasternDate,
+    scheduledEasternTime: game.scheduledEasternTime,
     matchup: `${game.awayTeam?.name} at ${game.homeTeam?.name}`,
     awayTeam: game.awayTeam?.name,
     homeTeam: game.homeTeam?.name,

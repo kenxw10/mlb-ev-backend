@@ -27,8 +27,18 @@ function getEasternDateFromIso(isoString) {
   return `${year}-${month}-${day}`;
 }
 
+function getEasternTimeFromIso(isoString) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true
+  }).format(new Date(isoString));
+}
+
 module.exports = {
   normalizeTeamName,
   buildMatchupKey,
-  getEasternDateFromIso
+  getEasternDateFromIso,
+  getEasternTimeFromIso
 };

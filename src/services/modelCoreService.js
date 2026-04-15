@@ -320,6 +320,49 @@ function getConfidenceTier(candidate, dataQuality, thresholds = {}) {
   return "low";
 }
 
+function getGameActionability(game) {
+  const status = String(game?.status || "").toLowerCase();
+
+  if (status.includes("final") || status.includes("postponed") || status.includes("cancelled")) {
+    return {
+      actionable: false,
+      reason: "Game status is no longer actionable."
+    };
+  }
+
+  if (
+    status.includes("in progress") ||
+    status.includes("manager challenge") ||
+    status.includes("review") ||
+    status.includes("delayed") ||
+    status.includes("warmup") ||
+    status.includes("live")
+  ) {
+    return {
+      actionable: false,
+      reason: "Game is already live."
+    };
+  }
+
+  const scheduledStartMs = game?.gameDate ? new Date(game.gameDate).getTime() : null;
+
+  if (
+    scheduledStartMs !== null &&
+    !Number.isNaN(scheduledStartMs) &&
+    scheduledStartMs <= Date.now()
+  ) {
+    return {
+      actionable: false,
+      reason: "Scheduled start time has already passed."
+    };
+  }
+
+  return {
+    actionable: true,
+    reason: null
+  };
+}
+
 module.exports = {
   clamp,
   safeNumber,
@@ -329,5 +372,6 @@ module.exports = {
   scoreTeam,
   buildMatchupReasoning,
   flipReasoning,
-  getConfidenceTier
+  getConfidenceTier,
+  getGameActionability
 };

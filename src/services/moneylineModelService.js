@@ -11,7 +11,8 @@ const {
   scoreTeam,
   buildMatchupReasoning,
   flipReasoning,
-  getConfidenceTier
+  getConfidenceTier,
+  getGameActionability
 } = require("./modelCoreService");
 
 const MIN_EDGE = 0.015;
@@ -71,12 +72,12 @@ function evaluateMoneylineCandidate(side, teamName, winProbability, bestPrice, r
 }
 
 function shouldRejectGame(game, dataQuality) {
-  const status = String(game?.status || "").toLowerCase();
+  const actionability = getGameActionability(game);
 
-  if (status.includes("final") || status.includes("postponed") || status.includes("cancelled")) {
+  if (!actionability.actionable) {
     return {
       reject: true,
-      reason: "Game status is no longer actionable."
+      reason: actionability.reason
     };
   }
 
@@ -191,6 +192,8 @@ function evaluateGameMoneyline(game) {
   return {
     gamePk: game.gamePk,
     gameDate: game.gameDate,
+    scheduledEasternDate: game.scheduledEasternDate,
+    scheduledEasternTime: game.scheduledEasternTime,
     matchup: `${game.awayTeam?.name} at ${game.homeTeam?.name}`,
     awayTeam: game.awayTeam?.name,
     homeTeam: game.homeTeam?.name,

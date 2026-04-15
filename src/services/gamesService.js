@@ -3,6 +3,10 @@ const {
   fetchPitcherSeasonStats,
   fetchTeamSeasonStats
 } = require("../providers/mlbStatsProvider");
+const {
+  getEasternDateFromIso,
+  getEasternTimeFromIso
+} = require("../utils/teamUtils");
 
 function mapPitcherStats(statsResponse) {
   const split = statsResponse?.stats?.[0]?.splits?.[0];
@@ -137,6 +141,8 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
   return {
     gamePk: game.gamePk,
     gameDate: game.gameDate,
+    scheduledEasternDate: getEasternDateFromIso(game.gameDate),
+    scheduledEasternTime: getEasternTimeFromIso(game.gameDate),
     status: game.status?.detailedState || null,
     awayTeam: {
       id: awayTeam?.team?.id || null,
@@ -184,11 +190,17 @@ async function getGamesForDate(date) {
   const rawGames =
     scheduleData?.dates?.flatMap((scheduleDate) => scheduleDate.games || []) || [];
 
+  const easternDateFilteredGames = rawGames.filter(
+    (game) => getEasternDateFromIso(game.gameDate) === date
+  );
+
   const games = await Promise.all(
-    rawGames.map((game) =>
+    easternDateFilteredGames.map((game) =>
       mapGame(game, season, hittingStatsMap, pitchingStatsMap)
     )
   );
+
+  games.sort((a, b) => new Date(a.gameDate) - new Date(b.gameDate));
 
   return {
     ok: true,
