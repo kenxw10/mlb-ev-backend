@@ -2,6 +2,7 @@ const { getGamesForDate } = require("./gamesService");
 const { fetchMlbOdds } = require("../providers/oddsApiProvider");
 const { rankMoneylinePicks } = require("./moneylineModelService");
 const { rankRunLinePicks } = require("./runLineModelService");
+const { rankTotalsPicks } = require("./totalsModelService");
 const {
   buildMatchupKey,
   getEasternDateFromIso
@@ -92,6 +93,7 @@ async function getPicksForDate(date) {
 
   const moneylineResults = rankMoneylinePicks(gamesWithOdds);
   const runLineResults = rankRunLinePicks(gamesWithOdds);
+  const totalsResults = rankTotalsPicks(gamesWithOdds);
 
   return {
     ok: true,
@@ -108,9 +110,14 @@ async function getPicksForDate(date) {
         evaluatedGameCount: runLineResults.evaluatedGames.length,
         rankedPickCount: runLineResults.positiveEvPicks.length,
         topPicks: runLineResults.positiveEvPicks.slice(0, 4)
+      },
+      totals: {
+        evaluatedGameCount: totalsResults.evaluatedGames.length,
+        rankedPickCount: totalsResults.positiveEvPicks.length,
+        topPicks: totalsResults.positiveEvPicks.slice(0, 4)
       }
     },
-    message: "Moneyline and run line EV models applied with filtering and data-quality guardrails."
+    message: "Moneyline, run line, and totals EV models applied with filtering and data-quality guardrails."
   };
 }
 
