@@ -1,5 +1,6 @@
 const { getGamesForDate } = require("./gamesService");
 const { fetchMlbOdds } = require("../providers/oddsApiProvider");
+const { rankMoneylinePicks } = require("./moneylineModelService");
 const {
   buildMatchupKey,
   getEasternDateFromIso
@@ -65,7 +66,7 @@ async function getPicksForDate(date) {
 
   const oddsMap = buildOddsMap(oddsEvents, date);
 
-  const picks = (gamesResponse.games || []).map((game) => {
+  const gamesWithOdds = (gamesResponse.games || []).map((game) => {
     const matchupKey = buildMatchupKey(
       game.awayTeam?.name,
       game.homeTeam?.name
@@ -84,15 +85,22 @@ async function getPicksForDate(date) {
     };
   });
 
-  const oddsMatchedCount = picks.filter((pick) => pick.oddsAvailable).length;
+  const oddsMatchedCount = gamesWithOdds.filter(
+    (game) => game.oddsAvailable
+  ).length;
+
+  const { evaluatedGames, positiveEvPicks } = rankMoneylinePicks(gamesWithOdds);
 
   return {
     ok: true,
     date,
-    gameCount: picks.length,
+    marketType: "moneyline",
+    gameCount: gamesWithOdds.length,
     oddsMatchedCount,
-    picks,
-    message: "Odds merged successfully. EV model not applied yet."
+    evaluatedGameCount: evaluatedGames.length,
+    positiveEvPickCount: positiveEvPicks.length,
+    topPicks: positiveEvPicks.slice(0, 4),
+    message: "Moneyline EV model applied."
   };
 }
 
