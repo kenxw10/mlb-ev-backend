@@ -1,0 +1,156 @@
+openapi: 3.1.0
+info:
+  title: MLB EV Backend API
+  version: 1.0.0
+  description: API for MLB schedule and ranked betting picks.
+servers:
+  - url: https://mlb-ev-backend-production.up.railway.app
+security:
+  - ApiKeyAuth: []
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: Unauthorized.
+    HealthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        service:
+          type: string
+          example: mlb-ev-backend
+        timestamp:
+          type: string
+          format: date-time
+    PicksResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        date:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        gameCount:
+          type: integer
+        oddsMatchedCount:
+          type: integer
+        totalRankedPickCount:
+          type: integer
+        topPicksOverall:
+          type: array
+          items:
+            type: object
+        byMarket:
+          type: object
+          properties:
+            moneyline:
+              type: object
+            runLine:
+              type: object
+            totals:
+              type: object
+    GamesResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        date:
+          type: string
+        season:
+          type: string
+        gameCount:
+          type: integer
+        games:
+          type: array
+          items:
+            type: object
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Successful health response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/picks:
+    get:
+      operationId: getMlbPicks
+      summary: Get ranked MLB EV picks for a date
+      parameters:
+        - in: query
+          name: date
+          required: false
+          description: Date in YYYY-MM-DD. Defaults to today's date in Eastern Time if omitted.
+          schema:
+            type: string
+            example: 2026-04-15
+      responses:
+        '200':
+          description: Ranked picks response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PicksResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/games:
+    get:
+      operationId: getMlbGames
+      summary: Get MLB games and matchup inputs for a date
+      parameters:
+        - in: query
+          name: date
+          required: false
+          description: Date in YYYY-MM-DD. Defaults to today's date in Eastern Time if omitted.
+          schema:
+            type: string
+            example: 2026-04-15
+      responses:
+        '200':
+          description: Games response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GamesResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
