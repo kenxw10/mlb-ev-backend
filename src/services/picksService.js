@@ -9,29 +9,40 @@ const {
   getEasternDateFromIso
 } = require("../utils/teamUtils");
 
+const ALLOWED_BOOKMAKERS = new Set(
+  (process.env.ODDS_API_BOOKMAKERS || "draftkings,fanduel")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 function mapMarketFromBookmakers(bookmakers, marketKey) {
-  return (bookmakers || []).flatMap((bookmaker) => {
-    const market = (bookmaker.markets || []).find(
-      (marketItem) => marketItem.key === marketKey
-    );
+  return (bookmakers || [])
+    .filter((bookmaker) =>
+      ALLOWED_BOOKMAKERS.has(String(bookmaker.key || "").toLowerCase())
+    )
+    .flatMap((bookmaker) => {
+      const market = (bookmaker.markets || []).find(
+        (marketItem) => marketItem.key === marketKey
+      );
 
-    if (!market) {
-      return [];
-    }
-
-    return [
-      {
-        bookmakerKey: bookmaker.key || null,
-        bookmakerTitle: bookmaker.title || null,
-        lastUpdate: bookmaker.last_update || null,
-        outcomes: (market.outcomes || []).map((outcome) => ({
-          name: outcome.name || null,
-          price: outcome.price ?? null,
-          point: outcome.point ?? null
-        }))
+      if (!market) {
+        return [];
       }
-    ];
-  });
+
+      return [
+        {
+          bookmakerKey: bookmaker.key || null,
+          bookmakerTitle: bookmaker.title || null,
+          lastUpdate: bookmaker.last_update || null,
+          outcomes: (market.outcomes || []).map((outcome) => ({
+            name: outcome.name || null,
+            price: outcome.price ?? null,
+            point: outcome.point ?? null
+          }))
+        }
+      ];
+    });
 }
 
 function buildOddsMap(oddsEvents, requestedDate) {
@@ -80,6 +91,8 @@ async function getPicksForDate(date) {
     return {
       gamePk: game.gamePk,
       gameDate: game.gameDate,
+      scheduledEasternDate: game.scheduledEasternDate,
+      scheduledEasternTime: game.scheduledEasternTime,
       status: game.status,
       awayTeam: game.awayTeam,
       homeTeam: game.homeTeam,
