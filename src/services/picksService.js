@@ -1,6 +1,7 @@
 const { getGamesForDate } = require("./gamesService");
 const { fetchMlbOdds } = require("../providers/oddsApiProvider");
 const { rankMoneylinePicks } = require("./moneylineModelService");
+const { rankRunLinePicks } = require("./runLineModelService");
 const {
   buildMatchupKey,
   getEasternDateFromIso
@@ -89,18 +90,27 @@ async function getPicksForDate(date) {
     (game) => game.oddsAvailable
   ).length;
 
-  const { evaluatedGames, positiveEvPicks } = rankMoneylinePicks(gamesWithOdds);
+  const moneylineResults = rankMoneylinePicks(gamesWithOdds);
+  const runLineResults = rankRunLinePicks(gamesWithOdds);
 
   return {
     ok: true,
     date,
-    marketType: "moneyline",
     gameCount: gamesWithOdds.length,
     oddsMatchedCount,
-    evaluatedGameCount: evaluatedGames.length,
-    rankedPickCount: positiveEvPicks.length,
-    topPicks: positiveEvPicks.slice(0, 4),
-    message: "Moneyline EV model applied with filtering and data-quality guardrails."
+    markets: {
+      moneyline: {
+        evaluatedGameCount: moneylineResults.evaluatedGames.length,
+        rankedPickCount: moneylineResults.positiveEvPicks.length,
+        topPicks: moneylineResults.positiveEvPicks.slice(0, 4)
+      },
+      runLine: {
+        evaluatedGameCount: runLineResults.evaluatedGames.length,
+        rankedPickCount: runLineResults.positiveEvPicks.length,
+        topPicks: runLineResults.positiveEvPicks.slice(0, 4)
+      }
+    },
+    message: "Moneyline and run line EV models applied with filtering and data-quality guardrails."
   };
 }
 

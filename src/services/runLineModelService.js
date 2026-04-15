@@ -14,15 +14,17 @@ const {
   getConfidenceTier
 } = require("./modelCoreService");
 
-const MIN_EDGE = 0.015;
-const MIN_EXPECTED_VALUE = 0.015;
+const MIN_EDGE = 0.02;
+const MIN_EXPECTED_VALUE = 0.02;
 const MIN_DATA_QUALITY = 0.6;
+const RUNS_PER_SCORE_UNIT = 1.35;
+const RUN_LINE_SIGMOID_SCALE = 0.95;
 
-function getBestMoneylinePriceForTeam(odds, teamName) {
-  const moneylineMarkets = odds?.moneyline || [];
+function getBestRunLinePriceForTeam(odds, teamName) {
+  const spreadMarkets = odds?.spreads || [];
   let best = null;
 
-  for (const market of moneylineMarkets) {
+  for (const market of spreadMarkets) {
     for (const outcome of market.outcomes || []) {
       if (outcome.name !== teamName) {
         continue;
@@ -32,10 +34,19 @@ function getBestMoneylinePriceForTeam(odds, teamName) {
         continue;
       }
 
+      if (outcome.point === null || outcome.point === undefined) {
+        continue;
+      }
+
+      if (Math.abs(outcome.point) !== 1.5) {
+        continue;
+      }
+
       if (!best || outcome.price > best.price) {
         best = {
           teamName: outcome.name,
           price: outcome.price,
+          point: outcome.point,
           bookmakerKey: market.bookmakerKey,
           bookmakerTitle: market.bookmakerTitle,
           lastUpdate: market.lastUpdate
@@ -47,26 +58,60 @@ function getBestMoneylinePriceForTeam(odds, teamName) {
   return best;
 }
 
-function evaluateMoneylineCandidate(side, teamName, winProbability, bestPrice, reasoning) {
+function evaluateRunLineCandidate(
+  side,
+  teamName,
+  projectedTeamMargin,
+  bestPrice,
+  baseReasoning,
+  dataQuality
+) {
   if (!bestPrice) {
     return null;
   }
 
+  const coverProbability = clamp(
+    logistic((projectedTeamMargin + bestPrice.point) * RUN_LINE_SIGMOID_SCALE),
+    0.05,
+    0.95
+  );
+
   const impliedProbability = americanToImpliedProbability(bestPrice.price);
-  const ev = expectedValue(winProbability, bestPrice.price);
-  const edge = impliedProbability === null ? null : winProbability - impliedProbability;
+  const ev = expectedValue(coverProbability, bestPrice.price);
+  const edge =
+    impliedProbability === null ? null : coverProbability - impliedProbability;
 
   return {
     side,
     team: teamName,
     sportsbook: bestPrice.bookmakerTitle,
+    point: bestPrice.point,
     price: bestPrice.price,
     impliedProbability: roundNumber(impliedProbability, 4),
-    modelProbability: roundNumber(winProbability, 4),
-    fairOdds: probabilityToAmerican(winProbability),
+    modelProbability: roundNumber(coverProbability, 4),
+    fairOdds: probabilityToAmerican(coverProbability),
     edge: roundNumber(edge, 4),
     expectedValue: roundNumber(ev, 4),
-    reasoning
+    reasoning: {
+      ...baseReasoning,
+      projectedTeamRunMargin: roundNumber(projectedTeamMargin, 3),
+      runLinePoint: bestPrice.point
+    },
+    confidence: getConfidenceTier(candidatePlaceholder(edge, ev), dataQuality, {
+      highEdge: 0.05,
+      highEv: 0.05,
+      highQuality: 0.85,
+      mediumEdge: 0.03,
+      mediumEv: 0.03,
+      mediumQuality: 0.7
+    })
+  };
+}
+
+function candidatePlaceholder(edge, expectedValueValue) {
+  return {
+    edge: roundNumber(edge, 4),
+    expectedValue: roundNumber(expectedValueValue, 4)
   };
 }
 
@@ -113,7 +158,7 @@ function passesCandidateFilters(candidate, dataQuality) {
   return true;
 }
 
-function evaluateGameMoneyline(game) {
+function evaluateGameRunLine(game) {
   if (!game?.oddsAvailable || !game?.odds) {
     return null;
   }
@@ -132,8 +177,8 @@ function evaluateGameMoneyline(game) {
   const scoreDiff =
     awayScoreCard.totalScore - (homeScoreCard.totalScore + homeFieldAdjustment);
 
-  const awayWinProbability = clamp(logistic(scoreDiff * 1.10), 0.07, 0.93);
-  const homeWinProbability = 1 - awayWinProbability;
+  const projectedAwayRunMargin = scoreDiff * RUNS_PER_SCORE_UNIT;
+  const projectedHomeRunMargin = -projectedAwayRunMargin;
 
   const sharedReasoning = buildMatchupReasoning(
     game.awayTeam,
@@ -143,38 +188,36 @@ function evaluateGameMoneyline(game) {
     dataQuality
   );
 
-  const awayBestPrice = getBestMoneylinePriceForTeam(
+  const awayBestPrice = getBestRunLinePriceForTeam(
     game.odds,
     game.awayTeam?.name
   );
 
-  const homeBestPrice = getBestMoneylinePriceForTeam(
+  const homeBestPrice = getBestRunLinePriceForTeam(
     game.odds,
     game.homeTeam?.name
   );
 
-  const awayCandidate = evaluateMoneylineCandidate(
+  const awayCandidate = evaluateRunLineCandidate(
     "away",
     game.awayTeam?.name,
-    awayWinProbability,
+    projectedAwayRunMargin,
     awayBestPrice,
-    sharedReasoning
+    sharedReasoning,
+    dataQuality
   );
 
-  const homeCandidate = evaluateMoneylineCandidate(
+  const homeCandidate = evaluateRunLineCandidate(
     "home",
     game.homeTeam?.name,
-    homeWinProbability,
+    projectedHomeRunMargin,
     homeBestPrice,
-    flipReasoning(sharedReasoning)
+    flipReasoning(sharedReasoning),
+    dataQuality
   );
 
   const filteredCandidates = [awayCandidate, homeCandidate]
-    .filter((candidate) => passesCandidateFilters(candidate, dataQuality))
-    .map((candidate) => ({
-      ...candidate,
-      confidence: getConfidenceTier(candidate, dataQuality)
-    }));
+    .filter((candidate) => passesCandidateFilters(candidate, dataQuality));
 
   if (filteredCandidates.length === 0) {
     return null;
@@ -195,14 +238,15 @@ function evaluateGameMoneyline(game) {
     awayTeam: game.awayTeam?.name,
     homeTeam: game.homeTeam?.name,
     dataQuality,
+    projectedAwayRunMargin: roundNumber(projectedAwayRunMargin, 3),
     bestBet: filteredCandidates[0],
     alternatives: filteredCandidates.slice(1)
   };
 }
 
-function rankMoneylinePicks(gamesWithOdds) {
+function rankRunLinePicks(gamesWithOdds) {
   const evaluatedGames = (gamesWithOdds || [])
-    .map(evaluateGameMoneyline)
+    .map(evaluateGameRunLine)
     .filter(Boolean);
 
   const positiveEvPicks = evaluatedGames.sort((a, b) => {
@@ -224,5 +268,5 @@ function rankMoneylinePicks(gamesWithOdds) {
 }
 
 module.exports = {
-  rankMoneylinePicks
+  rankRunLinePicks
 };
