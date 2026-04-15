@@ -18,6 +18,26 @@ async function fetchScheduleForDate(date) {
   return response.data;
 }
 
+async function fetchPitcherSeasonStats(personId, season) {
+  if (!personId) {
+    return null;
+  }
+
+  const url = `${MLB_STATS_API_BASE_URL}/people/${personId}/stats`;
+
+  const response = await axios.get(url, {
+    params: {
+      stats: "season",
+      group: "pitching",
+      season
+    },
+    timeout: 15000
+  });
+
+  return response.data;
+}
+
 module.exports = {
-  fetchScheduleForDate
+  fetchScheduleForDate,
+  fetchPitcherSeasonStats
 };
