@@ -7,6 +7,7 @@ const {
 const {
   clamp,
   logistic,
+  calibrateProbability,
   buildDataQuality,
   scoreTeam,
   buildMatchupReasoning,
@@ -16,10 +17,32 @@ const {
 } = require("./modelCoreService");
 
 const MIN_EDGE = 0.02;
-const MIN_EXPECTED_VALUE = 0.02;
+const MIN_EXPECTED_VALUE = 0.015;
 const MIN_DATA_QUALITY = 0.6;
-const RUNS_PER_SCORE_UNIT = 1.35;
-const RUN_LINE_SIGMOID_SCALE = 0.95;
+const HOME_FIELD_ADJUSTMENT = 0.08;
+const RUNS_PER_SCORE_UNIT = 0.70;
+const RUN_LINE_SIGMOID_SCALE = 0.45;
+
+function average(numbers) {
+  if (!numbers || numbers.length === 0) {
+    return null;
+  }
+
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+function getAverageRunLineImpliedProbability(odds, teamName, point) {
+  const probabilities = (odds?.spreads || []).flatMap((market) =>
+    (market.outcomes || [])
+      .filter(
+        (outcome) => outcome.name === teamName && Number(outcome.point) === Number(point)
+      )
+      .map((outcome) => americanToImpliedProbability(outcome.price))
+      .filter((value) => value !== null)
+  );
+
+  return average(probabilities);
+}
 
 function getBestRunLinePriceForTeam(odds, teamName) {
   const spreadMarkets = odds?.spreads || [];
@@ -39,7 +62,7 @@ function getBestRunLinePriceForTeam(odds, teamName) {
         continue;
       }
 
-      if (Math.abs(outcome.point) !== 1.5) {
+      if (Math.abs(Number(outcome.point)) !== 1.5) {
         continue;
       }
 
@@ -72,16 +95,28 @@ function evaluateRunLineCandidate(
   projectedTeamMargin,
   bestPrice,
   baseReasoning,
-  dataQuality
+  dataQuality,
+  marketBaselineProbability
 ) {
   if (!bestPrice) {
     return null;
   }
 
-  const coverProbability = clamp(
-    logistic((projectedTeamMargin + bestPrice.point) * RUN_LINE_SIGMOID_SCALE),
-    0.05,
-    0.95
+  const rawCoverProbability = clamp(
+    logistic((projectedTeamMargin + Number(bestPrice.point)) * RUN_LINE_SIGMOID_SCALE),
+    0.18,
+    0.82
+  );
+
+  const coverProbability = calibrateProbability(
+    rawCoverProbability,
+    marketBaselineProbability,
+    {
+      modelWeight: 0.18,
+      neutralShrink: 0.82,
+      capLow: 0.25,
+      capHigh: 0.75
+    }
   );
 
   const impliedProbability = americanToImpliedProbability(bestPrice.price);
@@ -106,11 +141,11 @@ function evaluateRunLineCandidate(
       runLinePoint: bestPrice.point
     },
     confidence: getConfidenceTier(candidatePlaceholder(edge, ev), dataQuality, {
-      highEdge: 0.05,
-      highEv: 0.05,
+      highEdge: 0.04,
+      highEv: 0.04,
       highQuality: 0.85,
-      mediumEdge: 0.03,
-      mediumEv: 0.03,
+      mediumEdge: 0.025,
+      mediumEv: 0.02,
       mediumQuality: 0.7
     })
   };
@@ -174,9 +209,8 @@ function evaluateGameRunLine(game) {
   const awayScoreCard = scoreTeam(game.awayTeam);
   const homeScoreCard = scoreTeam(game.homeTeam);
 
-  const homeFieldAdjustment = 0.10;
   const scoreDiff =
-    awayScoreCard.totalScore - (homeScoreCard.totalScore + homeFieldAdjustment);
+    awayScoreCard.totalScore - (homeScoreCard.totalScore + HOME_FIELD_ADJUSTMENT);
 
   const projectedAwayRunMargin = scoreDiff * RUNS_PER_SCORE_UNIT;
   const projectedHomeRunMargin = -projectedAwayRunMargin;
@@ -199,13 +233,30 @@ function evaluateGameRunLine(game) {
     game.homeTeam?.name
   );
 
+  const awayMarketBaselineProbability = awayBestPrice
+    ? getAverageRunLineImpliedProbability(
+        game.odds,
+        game.awayTeam?.name,
+        awayBestPrice.point
+      )
+    : null;
+
+  const homeMarketBaselineProbability = homeBestPrice
+    ? getAverageRunLineImpliedProbability(
+        game.odds,
+        game.homeTeam?.name,
+        homeBestPrice.point
+      )
+    : null;
+
   const awayCandidate = evaluateRunLineCandidate(
     "away",
     game.awayTeam?.name,
     projectedAwayRunMargin,
     awayBestPrice,
     sharedReasoning,
-    dataQuality
+    dataQuality,
+    awayMarketBaselineProbability
   );
 
   const homeCandidate = evaluateRunLineCandidate(
@@ -214,7 +265,8 @@ function evaluateGameRunLine(game) {
     projectedHomeRunMargin,
     homeBestPrice,
     flipReasoning(sharedReasoning),
-    dataQuality
+    dataQuality,
+    homeMarketBaselineProbability
   );
 
   const filteredCandidates = [awayCandidate, homeCandidate]

@@ -50,6 +50,23 @@ function logistic(x) {
   return 1 / (1 + Math.exp(-x));
 }
 
+function calibrateProbability(rawProbability, marketProbability, options = {}) {
+  const capLow = options.capLow ?? 0.18;
+  const capHigh = options.capHigh ?? 0.82;
+  const modelWeight = options.modelWeight ?? 0.22;
+  const neutralShrink = options.neutralShrink ?? 0.85;
+
+  let calibrated = clamp(rawProbability, capLow, capHigh);
+  calibrated = 0.5 + (calibrated - 0.5) * neutralShrink;
+
+  if (marketProbability !== null && marketProbability !== undefined) {
+    calibrated =
+      marketProbability * (1 - modelWeight) + calibrated * modelWeight;
+  }
+
+  return clamp(calibrated, capLow, capHigh);
+}
+
 function getRunsPerGame(hittingStats) {
   const runs = safeNumber(hittingStats?.runs);
   const gamesPlayed = safeNumber(hittingStats?.gamesPlayed);
@@ -368,6 +385,7 @@ module.exports = {
   safeNumber,
   parseInningsPitched,
   logistic,
+  calibrateProbability,
   buildDataQuality,
   scoreTeam,
   buildMatchupReasoning,

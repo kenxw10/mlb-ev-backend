@@ -7,6 +7,7 @@ const {
 const {
   clamp,
   logistic,
+  calibrateProbability,
   buildDataQuality,
   scoreTeam,
   buildMatchupReasoning,
@@ -18,6 +19,38 @@ const {
 const MIN_EDGE = 0.015;
 const MIN_EXPECTED_VALUE = 0.015;
 const MIN_DATA_QUALITY = 0.6;
+const HOME_FIELD_ADJUSTMENT = 0.08;
+const SCORE_TO_PROB_SCALE = 0.55;
+
+function average(numbers) {
+  if (!numbers || numbers.length === 0) {
+    return null;
+  }
+
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+function getAverageMoneylineImpliedProbabilityForTeam(odds, teamName) {
+  const probabilities = (odds?.moneyline || []).flatMap((market) =>
+    (market.outcomes || [])
+      .filter((outcome) => outcome.name === teamName)
+      .map((outcome) => americanToImpliedProbability(outcome.price))
+      .filter((value) => value !== null)
+  );
+
+  return average(probabilities);
+}
+
+function getAwayMarketBaselineProbability(odds, awayTeamName, homeTeamName) {
+  const awayAvg = getAverageMoneylineImpliedProbabilityForTeam(odds, awayTeamName);
+  const homeAvg = getAverageMoneylineImpliedProbabilityForTeam(odds, homeTeamName);
+
+  if (awayAvg !== null && homeAvg !== null && awayAvg + homeAvg > 0) {
+    return awayAvg / (awayAvg + homeAvg);
+  }
+
+  return awayAvg;
+}
 
 function getBestMoneylinePriceForTeam(odds, teamName) {
   const moneylineMarkets = odds?.moneyline || [];
@@ -129,11 +162,32 @@ function evaluateGameMoneyline(game) {
   const awayScoreCard = scoreTeam(game.awayTeam);
   const homeScoreCard = scoreTeam(game.homeTeam);
 
-  const homeFieldAdjustment = 0.10;
   const scoreDiff =
-    awayScoreCard.totalScore - (homeScoreCard.totalScore + homeFieldAdjustment);
+    awayScoreCard.totalScore - (homeScoreCard.totalScore + HOME_FIELD_ADJUSTMENT);
 
-  const awayWinProbability = clamp(logistic(scoreDiff * 1.10), 0.07, 0.93);
+  const rawAwayWinProbability = clamp(
+    logistic(scoreDiff * SCORE_TO_PROB_SCALE),
+    0.15,
+    0.85
+  );
+
+  const awayMarketBaselineProbability = getAwayMarketBaselineProbability(
+    game.odds,
+    game.awayTeam?.name,
+    game.homeTeam?.name
+  );
+
+  const awayWinProbability = calibrateProbability(
+    rawAwayWinProbability,
+    awayMarketBaselineProbability,
+    {
+      modelWeight: 0.22,
+      neutralShrink: 0.85,
+      capLow: 0.18,
+      capHigh: 0.82
+    }
+  );
+
   const homeWinProbability = 1 - awayWinProbability;
 
   const sharedReasoning = buildMatchupReasoning(

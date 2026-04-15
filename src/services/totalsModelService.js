@@ -7,6 +7,7 @@ const {
 const {
   clamp,
   logistic,
+  calibrateProbability,
   buildDataQuality,
   scoreTeam,
   buildMatchupReasoning,
@@ -15,9 +16,17 @@ const {
 } = require("./modelCoreService");
 
 const MIN_EDGE = 0.02;
-const MIN_EXPECTED_VALUE = 0.02;
+const MIN_EXPECTED_VALUE = 0.015;
 const MIN_DATA_QUALITY = 0.6;
-const TOTAL_SIGMOID_SCALE = 0.90;
+const TOTAL_SIGMOID_SCALE = 0.45;
+
+function average(numbers) {
+  if (!numbers || numbers.length === 0) {
+    return null;
+  }
+
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
 
 function shouldRejectGame(game, dataQuality) {
   const actionability = getGameActionability(game);
@@ -70,17 +79,17 @@ function passesCandidateFilters(candidate, dataQuality) {
 }
 
 function getProjectedTeamRuns(teamScoreCard, opponentScoreCard, isHomeTeam) {
-  const baselineRuns = 4.25;
-  const homeAdjustment = isHomeTeam ? 0.15 : -0.05;
+  const baselineRuns = 4.15;
+  const homeAdjustment = isHomeTeam ? 0.10 : -0.03;
 
   const projectedRuns =
     baselineRuns +
-    teamScoreCard.offenseScore * 0.85 -
-    opponentScoreCard.bullpenAndStaffScore * 0.40 -
-    opponentScoreCard.starterScore * 0.30 +
+    teamScoreCard.offenseScore * 0.55 -
+    opponentScoreCard.bullpenAndStaffScore * 0.25 -
+    opponentScoreCard.starterScore * 0.20 +
     homeAdjustment;
 
-  return clamp(projectedRuns, 2.0, 8.0);
+  return clamp(projectedRuns, 2.8, 6.5);
 }
 
 function buildTotalsLinePairs(odds) {
@@ -121,6 +130,23 @@ function buildTotalsLinePairs(odds) {
   });
 }
 
+function getAverageTotalsImpliedProbability(odds, side, point) {
+  const sideName = String(side || "").toLowerCase();
+
+  const probabilities = (odds?.totals || []).flatMap((market) =>
+    (market.outcomes || [])
+      .filter(
+        (outcome) =>
+          String(outcome.name || "").toLowerCase() === sideName &&
+          Number(outcome.point) === Number(point)
+      )
+      .map((outcome) => americanToImpliedProbability(outcome.price))
+      .filter((value) => value !== null)
+  );
+
+  return average(probabilities);
+}
+
 function buildTotalsReasoning(
   awayTeam,
   homeTeam,
@@ -151,21 +177,33 @@ function evaluateTotalCandidate(
   linePair,
   projectedTotalRuns,
   baseReasoning,
-  dataQuality
+  dataQuality,
+  marketBaselineProbability
 ) {
   if (!linePair) {
     return null;
   }
 
-  const overProbability = clamp(
-    logistic((projectedTotalRuns - linePair.point) * TOTAL_SIGMOID_SCALE),
-    0.05,
-    0.95
+  const rawOverProbability = clamp(
+    logistic((projectedTotalRuns - Number(linePair.point)) * TOTAL_SIGMOID_SCALE),
+    0.20,
+    0.80
   );
 
-  const modelProbability = side === "over" ? overProbability : 1 - overProbability;
-  const price = side === "over" ? linePair.overPrice : linePair.underPrice;
+  const rawProbability = side === "over" ? rawOverProbability : 1 - rawOverProbability;
 
+  const modelProbability = calibrateProbability(
+    rawProbability,
+    marketBaselineProbability,
+    {
+      modelWeight: 0.18,
+      neutralShrink: 0.82,
+      capLow: 0.28,
+      capHigh: 0.72
+    }
+  );
+
+  const price = side === "over" ? linePair.overPrice : linePair.underPrice;
   const impliedProbability = americanToImpliedProbability(price);
   const ev = expectedValue(modelProbability, price);
   const edge =
@@ -182,11 +220,11 @@ function evaluateTotalCandidate(
     edge: roundNumber(edge, 4),
     expectedValue: roundNumber(ev, 4),
     confidence: getConfidenceTier(candidatePlaceholder(edge, ev), dataQuality, {
-      highEdge: 0.05,
-      highEv: 0.05,
+      highEdge: 0.04,
+      highEv: 0.04,
       highQuality: 0.85,
-      mediumEdge: 0.03,
-      mediumEv: 0.03,
+      mediumEdge: 0.025,
+      mediumEv: 0.02,
       mediumQuality: 0.7
     }),
     reasoning: {
@@ -243,14 +281,16 @@ function evaluateGameTotals(game) {
       linePair,
       projectedTotalRuns,
       baseReasoning,
-      dataQuality
+      dataQuality,
+      getAverageTotalsImpliedProbability(game.odds, "over", linePair.point)
     ),
     evaluateTotalCandidate(
       "under",
       linePair,
       projectedTotalRuns,
       baseReasoning,
-      dataQuality
+      dataQuality,
+      getAverageTotalsImpliedProbability(game.odds, "under", linePair.point)
     )
   ]);
 
