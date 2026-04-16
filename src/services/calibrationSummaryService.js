@@ -25,62 +25,13 @@ function round(value, decimals = 4) {
   return Number(value.toFixed(decimals));
 }
 
-function getBucketName(rank) {
-  if (rank === 1) {
-    return "rank_1";
-  }
-
-  if (rank <= 2) {
-    return "ranks_1_2";
-  }
-
-  if (rank <= 4) {
-    return "ranks_1_4";
-  }
-
-  return "all";
-}
-
-function initBucket() {
-  return {
-    gradedPickCount: 0,
-    winCount: 0,
-    lossCount: 0,
-    pushCount: 0,
-    averageModelProbability: null,
-    averageImpliedProbability: null,
-    winRate: null,
-    roiUnitsPerBet: null,
-    totalProfitUnits: null,
-    brierScore: null
-  };
-}
-
 function computeMetrics(rows) {
   const bucketMap = {
-    all: [],
-    rank_1: [],
-    ranks_1_2: [],
-    ranks_1_4: []
+    all: rows,
+    rank_1: rows.filter((row) => Number(row.rank_within_bucket) === 1),
+    ranks_1_2: rows.filter((row) => Number(row.rank_within_bucket) <= 2),
+    ranks_1_4: rows.filter((row) => Number(row.rank_within_bucket) <= 4)
   };
-
-  for (const row of rows) {
-    bucketMap.all.push(row);
-
-    const rank = Number(row.rank_overall);
-
-    if (rank === 1) {
-      bucketMap.rank_1.push(row);
-    }
-
-    if (rank <= 2) {
-      bucketMap.ranks_1_2.push(row);
-    }
-
-    if (rank <= 4) {
-      bucketMap.ranks_1_4.push(row);
-    }
-  }
 
   const result = {};
 
@@ -162,43 +113,32 @@ async function getCalibrationSummary() {
   const result = await query(`
     SELECT
       ps.market_type,
-      ps.rank_overall,
+      ps.rank_within_bucket,
       ps.model_probability,
       ps.implied_probability,
+      ps.source_bucket,
       g.outcome,
       g.profit_units
     FROM pick_snapshots ps
     INNER JOIN graded_pick_results g
       ON g.snapshot_id = ps.id
-    ORDER BY ps.saved_at ASC, ps.rank_overall ASC
+    WHERE COALESCE(ps.snapshot_mode, 'adhoc') = 'official'
+      AND ps.source_bucket IN ('moneyline', 'runLine', 'totals')
+    ORDER BY ps.saved_at ASC, ps.rank_within_bucket ASC
   `);
 
   const rows = result?.rows || [];
 
   const grouped = {
-    allMarkets: [],
-    moneyline: [],
-    runLine: [],
-    totals: []
+    moneyline: rows.filter((row) => row.source_bucket === "moneyline"),
+    runLine: rows.filter((row) => row.source_bucket === "runLine"),
+    totals: rows.filter((row) => row.source_bucket === "totals")
   };
-
-  for (const row of rows) {
-    grouped.allMarkets.push(row);
-
-    if (row.market_type === "moneyline") {
-      grouped.moneyline.push(row);
-    } else if (row.market_type === "runLine") {
-      grouped.runLine.push(row);
-    } else if (row.market_type === "totals") {
-      grouped.totals.push(row);
-    }
-  }
 
   return {
     ok: true,
     totalGradedRows: rows.length,
     summary: {
-      allMarkets: computeMetrics(grouped.allMarkets),
       moneyline: computeMetrics(grouped.moneyline),
       runLine: computeMetrics(grouped.runLine),
       totals: computeMetrics(grouped.totals)

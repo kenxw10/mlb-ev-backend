@@ -52,21 +52,22 @@ async function ensurePickSnapshotTable() {
   return true;
 }
 
-function buildSnapshotRows(response) {
+function buildSnapshotRows(response, snapshotMode = "adhoc") {
   const rows = [];
-
-  const overallPicks = response?.topPicksOverall || [];
-  for (let index = 0; index < overallPicks.length; index += 1) {
-    rows.push({
-      sourceBucket: "topPicksOverall",
-      rankOverall: index + 1,
-      rankWithinBucket: index + 1,
-      pick: overallPicks[index]
-    });
-  }
-
   const byMarket = response?.byMarket || {};
   const marketBuckets = ["moneyline", "runLine", "totals"];
+
+  if (snapshotMode !== "official") {
+    const overallPicks = response?.topPicksOverall || [];
+    for (let index = 0; index < overallPicks.length; index += 1) {
+      rows.push({
+        sourceBucket: "topPicksOverall",
+        rankOverall: index + 1,
+        rankWithinBucket: index + 1,
+        pick: overallPicks[index]
+      });
+    }
+  }
 
   for (const marketName of marketBuckets) {
     const picks = byMarket?.[marketName]?.topPicks || [];
@@ -96,7 +97,7 @@ async function persistServedPickSnapshot(response, options = {}) {
   const officialLockWindow = options.officialLockWindow || null;
   const officialRunId = options.officialRunId || null;
 
-  const rows = buildSnapshotRows(response);
+  const rows = buildSnapshotRows(response, snapshotMode);
 
   if (rows.length === 0) {
     return {

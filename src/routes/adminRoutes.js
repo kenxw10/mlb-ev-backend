@@ -100,7 +100,9 @@ router.get("/official-lock", async (req, res) => {
         : getEasternDateString();
 
     const lockWindow =
-      typeof req.query.window === "string" ? req.query.window.trim() : "";
+      typeof req.query.window === "string" && req.query.window.trim()
+        ? req.query.window.trim()
+        : "daily";
 
     if (!isValidDateString(requestedDate)) {
       return res.status(400).json({
@@ -112,7 +114,7 @@ router.get("/official-lock", async (req, res) => {
     if (!LOCK_WINDOWS[lockWindow]) {
       return res.status(400).json({
         ok: false,
-        error: "Valid window query parameter is required: early, main, or late."
+        error: "Valid window query parameter is required: daily."
       });
     }
 
