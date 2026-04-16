@@ -4,9 +4,7 @@ const { getPicksForDate } = require("./picksService");
 const { gradeSnapshotsForDate } = require("./pickGradingService");
 
 const LOCK_WINDOWS = {
-  early: { hour: 10, minute: 45 },
-  main: { hour: 14, minute: 30 },
-  late: { hour: 18, minute: 0 }
+  daily: { hour: 9, minute: 0 }
 };
 
 const MIN_MINUTES_TO_START = 45;
@@ -227,8 +225,7 @@ async function runOfficialLockForDateWindow(requestedDate, lockWindow) {
       requestedDate,
       lockWindow,
       skipped: false,
-      totalRankedPickCount: response.totalRankedPickCount || 0,
-      topOverallCount: (response.topPicksOverall || []).length
+      totalRankedPickCount: response.totalRankedPickCount || 0
     };
   } catch (error) {
     await finishOfficialLockRun(run.id, "failed", error.message || "Official lock failed.");
