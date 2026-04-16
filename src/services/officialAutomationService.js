@@ -10,6 +10,7 @@ const LOCK_WINDOWS = {
 };
 
 const MIN_MINUTES_TO_START = 45;
+const EXECUTION_WINDOW_MINUTES = 14;
 
 function getEasternParts(date = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -45,11 +46,21 @@ function getYesterdayEasternDateString(date = new Date()) {
   return utcDate.toISOString().slice(0, 10);
 }
 
-function getMatchingLockWindow(date = new Date()) {
+function easternMinutesOfDay(date = new Date()) {
   const parts = getEasternParts(date);
+  return parts.hour * 60 + parts.minute;
+}
+
+function isWithinWindow(nowMinutes, targetHour, targetMinute) {
+  const targetMinutes = targetHour * 60 + targetMinute;
+  return nowMinutes >= targetMinutes && nowMinutes <= targetMinutes + EXECUTION_WINDOW_MINUTES;
+}
+
+function getMatchingLockWindow(date = new Date()) {
+  const nowMinutes = easternMinutesOfDay(date);
 
   for (const [label, config] of Object.entries(LOCK_WINDOWS)) {
-    if (parts.hour === config.hour && parts.minute === config.minute) {
+    if (isWithinWindow(nowMinutes, config.hour, config.minute)) {
       return label;
     }
   }
@@ -58,8 +69,8 @@ function getMatchingLockWindow(date = new Date()) {
 }
 
 function isGradeWindow(date = new Date()) {
-  const parts = getEasternParts(date);
-  return parts.hour === 9 && parts.minute === 0;
+  const nowMinutes = easternMinutesOfDay(date);
+  return isWithinWindow(nowMinutes, 9, 0);
 }
 
 async function ensureOfficialAutomationTables() {
