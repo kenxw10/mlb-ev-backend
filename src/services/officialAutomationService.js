@@ -91,6 +91,11 @@ async function ensureOfficialAutomationTables() {
     )
   `);
 
+  await query(`
+    ALTER TABLE official_grade_runs
+    DROP CONSTRAINT IF EXISTS official_grade_runs_requested_date_key
+  `);
+
   return true;
 }
 
