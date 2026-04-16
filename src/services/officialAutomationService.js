@@ -83,7 +83,7 @@ async function ensureOfficialAutomationTables() {
   await query(`
     CREATE TABLE IF NOT EXISTS official_grade_runs (
       id TEXT PRIMARY KEY,
-      requested_date DATE NOT NULL UNIQUE,
+      requested_date DATE NOT NULL,
       status TEXT NOT NULL,
       note TEXT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -134,7 +134,7 @@ async function finishOfficialLockRun(id, status, note = null) {
 async function startOfficialGradeRun(requestedDate) {
   const id = crypto.randomUUID();
 
-  const result = await query(
+  await query(
     `
       INSERT INTO official_grade_runs (
         id,
@@ -142,16 +142,11 @@ async function startOfficialGradeRun(requestedDate) {
         status
       )
       VALUES ($1, $2, 'started')
-      ON CONFLICT (requested_date) DO NOTHING
-      RETURNING id
     `,
     [id, requestedDate]
   );
 
-  return {
-    inserted: Boolean(result?.rows?.length),
-    id
-  };
+  return { id };
 }
 
 async function finishOfficialGradeRun(id, status, note = null) {
@@ -237,15 +232,6 @@ async function runOfficialGradeForDate(requestedDate) {
 
   const run = await startOfficialGradeRun(requestedDate);
 
-  if (!run.inserted) {
-    return {
-      ok: true,
-      requestedDate,
-      skipped: true,
-      reason: "Official grade already exists for this date."
-    };
-  }
-
   try {
     const result = await gradeSnapshotsForDate(requestedDate, {
       snapshotMode: "official"
@@ -254,7 +240,7 @@ async function runOfficialGradeForDate(requestedDate) {
     await finishOfficialGradeRun(
       run.id,
       "completed",
-      `Graded ${result.gradedCount || 0} official picks.`
+      `Graded ${result.gradedCount || 0} official picks. Pending ${result.pendingCount || 0}.`
     );
 
     return result;
@@ -298,7 +284,7 @@ async function runDueOfficialGrade(now = new Date()) {
 
   return {
     ...result,
-    ran: !result.skipped
+    ran: true
   };
 }
 
