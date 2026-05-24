@@ -7,6 +7,11 @@ const {
 } = require("../services/pickGradingService");
 const { getCalibrationSummary } = require("../services/calibrationSummaryService");
 const {
+  MARKET_CALIBRATION_CONFIG,
+  fitCalibrationProfileForMarket,
+  getCalibrationProfilesSummary
+} = require("../services/calibrationService");
+const {
   LOCK_WINDOWS,
   getEasternDateString,
   getYesterdayEasternDateString,
@@ -88,6 +93,42 @@ router.get("/calibration-summary", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to build calibration summary."
+    });
+  }
+});
+
+router.get("/calibration-profiles", async (req, res) => {
+  try {
+    const result = await getCalibrationProfilesSummary();
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load calibration profiles."
+    });
+  }
+});
+
+router.get("/recalibrate-market", async (req, res) => {
+  try {
+    const marketType =
+      typeof req.query.marketType === "string" ? req.query.marketType.trim() : "";
+    const force =
+      typeof req.query.force === "string" && req.query.force.trim().toLowerCase() === "true";
+
+    if (!MARKET_CALIBRATION_CONFIG[marketType]) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid marketType query parameter is required: moneyline, runLine, or totals."
+      });
+    }
+
+    const result = await fitCalibrationProfileForMarket(marketType, { force });
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to recalibrate market."
     });
   }
 });

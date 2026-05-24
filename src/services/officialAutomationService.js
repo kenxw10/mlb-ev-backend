@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { query, isDatabaseEnabled } = require("../config/db");
 const { getPicksForDate } = require("./picksService");
 const { gradeSnapshotsForDate } = require("./pickGradingService");
+const { maybeAutoFitEligibleMarkets } = require("./calibrationService");
 
 const LOCK_WINDOWS = {
   daily: { hour: 9, minute: 0 }
@@ -250,13 +251,18 @@ async function runOfficialGradeForDate(requestedDate) {
       snapshotMode: "official"
     });
 
+    const autoCalibration = await maybeAutoFitEligibleMarkets();
+
     await finishOfficialGradeRun(
       run.id,
       "completed",
       `Graded ${result.gradedCount || 0} official picks. Pending ${result.pendingCount || 0}.`
     );
 
-    return result;
+    return {
+      ...result,
+      autoCalibration
+    };
   } catch (error) {
     await finishOfficialGradeRun(run.id, "failed", error.message || "Official grading failed.");
     throw error;

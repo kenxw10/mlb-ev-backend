@@ -6,6 +6,10 @@ const { rankTotalsPicks } = require("./totalsModelService");
 const { formatPicksResponse } = require("./picksFormatterService");
 const { persistServedPickSnapshot } = require("./pickSnapshotService");
 const {
+  getActiveCalibrationProfiles,
+  applyCalibrationToResponse
+} = require("./calibrationService");
+const {
   buildMatchupKey,
   getEasternDateFromIso
 } = require("../utils/teamUtils");
@@ -134,7 +138,7 @@ async function getPicksForDate(date, options = {}) {
   const runLineResults = rankRunLinePicks(gamesWithOdds);
   const totalsResults = rankTotalsPicks(gamesWithOdds);
 
-  const response = formatPicksResponse({
+  let response = formatPicksResponse({
     date,
     gameCount: gamesWithOdds.length,
     oddsMatchedCount,
@@ -142,6 +146,9 @@ async function getPicksForDate(date, options = {}) {
     runLineResults,
     totalsResults
   });
+
+  const calibrationProfiles = await getActiveCalibrationProfiles();
+  response = applyCalibrationToResponse(response, calibrationProfiles);
 
   if (persistSnapshots) {
     try {

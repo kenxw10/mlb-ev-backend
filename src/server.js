@@ -4,6 +4,7 @@ const app = require("./app");
 const { ensurePickSnapshotTable } = require("./services/pickSnapshotService");
 const { ensureGradedPickResultsTable } = require("./services/pickGradingService");
 const { ensureOfficialAutomationTables } = require("./services/officialAutomationService");
+const { ensureCalibrationTables } = require("./services/calibrationService");
 
 const PORT = process.env.PORT || 3000;
 
@@ -11,6 +12,7 @@ async function startServer() {
   await ensurePickSnapshotTable();
   await ensureGradedPickResultsTable();
   await ensureOfficialAutomationTables();
+  await ensureCalibrationTables();
 
   app.listen(PORT, () => {
     console.log(`MLB EV backend listening on port ${PORT}`);
