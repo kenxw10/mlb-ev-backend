@@ -13,6 +13,9 @@ const {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 } = require("../services/dashboardPicksService");
+const {
+  getBetPolicyTrackingSummary
+} = require("../services/betPolicyTrackingService");
 
 const router = express.Router();
 
@@ -176,6 +179,36 @@ router.get("/live-picks", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to load dashboard live picks."
+    });
+  }
+});
+
+router.get("/bet-policy-tracking", async (req, res) => {
+  try {
+    const marketType =
+      typeof req.query.marketType === "string" && req.query.marketType.trim()
+        ? req.query.marketType.trim()
+        : null;
+
+    const thresholdType =
+      typeof req.query.thresholdType === "string" && req.query.thresholdType.trim()
+        ? req.query.thresholdType.trim()
+        : null;
+
+    const result = await getBetPolicyTrackingSummary({
+      marketType,
+      thresholdType
+    });
+
+    return res.status(result.ok ? 200 : 500).json({
+      ...result,
+      frontendExplanation:
+        "Threshold tracking is based on official graded picks with calibrated probabilities. Early rows may be empty until enough post-calibration official picks are graded."
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard bet-policy tracking."
     });
   }
 });
