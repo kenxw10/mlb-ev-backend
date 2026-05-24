@@ -3,6 +3,7 @@ const { query, isDatabaseEnabled } = require("../config/db");
 const { getPicksForDate } = require("./picksService");
 const { gradeSnapshotsForDate } = require("./pickGradingService");
 const { maybeAutoFitEligibleMarkets } = require("./calibrationService");
+const { rebuildBetPolicyTracking } = require("./betPolicyTrackingService");
 
 const LOCK_WINDOWS = {
   daily: { hour: 9, minute: 0 }
@@ -252,6 +253,7 @@ async function runOfficialGradeForDate(requestedDate) {
     });
 
     const autoCalibration = await maybeAutoFitEligibleMarkets();
+    const betPolicyTracking = await rebuildBetPolicyTracking();
 
     await finishOfficialGradeRun(
       run.id,
@@ -261,7 +263,8 @@ async function runOfficialGradeForDate(requestedDate) {
 
     return {
       ...result,
-      autoCalibration
+      autoCalibration,
+      betPolicyTracking
     };
   } catch (error) {
     await finishOfficialGradeRun(run.id, "failed", error.message || "Official grading failed.");

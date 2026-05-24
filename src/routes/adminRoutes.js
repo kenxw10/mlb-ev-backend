@@ -12,6 +12,10 @@ const {
   getCalibrationProfilesSummary
 } = require("../services/calibrationService");
 const {
+  getBetPolicyTrackingSummary,
+  rebuildBetPolicyTracking
+} = require("../services/betPolicyTrackingService");
+const {
   LOCK_WINDOWS,
   getEasternDateString,
   getYesterdayEasternDateString,
@@ -129,6 +133,44 @@ router.get("/recalibrate-market", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to recalibrate market."
+    });
+  }
+});
+
+router.get("/bet-policy-tracking", async (req, res) => {
+  try {
+    const marketType =
+      typeof req.query.marketType === "string" && req.query.marketType.trim()
+        ? req.query.marketType.trim()
+        : null;
+
+    const thresholdType =
+      typeof req.query.thresholdType === "string" && req.query.thresholdType.trim()
+        ? req.query.thresholdType.trim()
+        : null;
+
+    const result = await getBetPolicyTrackingSummary({
+      marketType,
+      thresholdType
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load bet policy tracking."
+    });
+  }
+});
+
+router.get("/rebuild-bet-policy-tracking", async (req, res) => {
+  try {
+    const result = await rebuildBetPolicyTracking();
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to rebuild bet policy tracking."
     });
   }
 });
