@@ -3,6 +3,9 @@ const {
   getOfficialDashboardSummary,
   getOfficialPickHistory
 } = require("../services/dashboardPerformanceService");
+const {
+  getDashboardCalibrationStatus
+} = require("../services/dashboardCalibrationService");
 
 const router = express.Router();
 
@@ -78,6 +81,19 @@ router.get("/history", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to load dashboard history."
+    });
+  }
+});
+
+router.get("/calibration", async (req, res) => {
+  try {
+    const result = await getDashboardCalibrationStatus();
+
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard calibration status."
     });
   }
 });
