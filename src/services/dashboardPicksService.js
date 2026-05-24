@@ -1,5 +1,6 @@
 const { query, isDatabaseEnabled } = require("../config/db");
 const { getDashboardSlate } = require("./dashboardSlateService");
+const { getPicksForDate } = require("./picksService");
 
 const OFFICIAL_MARKET_BUCKETS = ["moneyline", "runLine", "totals"];
 
@@ -50,6 +51,33 @@ function buildSlateMap(slateResponse) {
   }
 
   return map;
+}
+
+function buildRankedPicksFromLiveResponse(picksResponse) {
+  return [
+    ...(picksResponse?.byMarket?.moneyline?.rankedPicks || []),
+    ...(picksResponse?.byMarket?.runLine?.rankedPicks || []),
+    ...(picksResponse?.byMarket?.totals?.rankedPicks || [])
+  ].sort((a, b) => {
+    const aUnits = toNumberOrNull(a?.recommendedUnits) || 0;
+    const bUnits = toNumberOrNull(b?.recommendedUnits) || 0;
+
+    if (bUnits !== aUnits) {
+      return bUnits - aUnits;
+    }
+
+    const aEv = toNumberOrNull(a?.expectedValue) ?? -999;
+    const bEv = toNumberOrNull(b?.expectedValue) ?? -999;
+
+    if (bEv !== aEv) {
+      return bEv - aEv;
+    }
+
+    const aEdge = toNumberOrNull(a?.edge) ?? -999;
+    const bEdge = toNumberOrNull(b?.edge) ?? -999;
+
+    return bEdge - aEdge;
+  });
 }
 
 function normalizeOfficialPickRow(row, slateGame) {
@@ -129,6 +157,65 @@ function normalizeOfficialPickRow(row, slateGame) {
     reasoning: rawPick?.reasoning || null,
     rawPick,
     rawGrade
+  };
+}
+
+function normalizeLivePick(pick, slateGame, rankOverall) {
+  return {
+    rankOverall,
+    liveOnly: true,
+    officialTracked: false,
+    source: "live_on_demand",
+
+    gamePk: toNumberOrNull(pick?.gamePk),
+    matchup: pick?.matchup || slateGame?.matchup || null,
+    scheduledEasternDate:
+      pick?.scheduledEasternDate ||
+      slateGame?.scheduledEasternDate ||
+      null,
+    scheduledEasternTime:
+      pick?.scheduledEasternTime ||
+      slateGame?.scheduledEasternTime ||
+      null,
+    status: slateGame?.status || null,
+    venueName: slateGame?.venueName || null,
+    awayTeam: slateGame?.awayTeam || null,
+    homeTeam: slateGame?.homeTeam || null,
+    probablePitchers: slateGame?.probablePitchers || null,
+    frontendLabels: slateGame?.frontendLabels || null,
+
+    marketType: pick?.marketType || null,
+    selection: pick?.selection || null,
+    side: pick?.side || null,
+    line: toNumberOrNull(pick?.line),
+    sportsbook: pick?.sportsbook || null,
+    price: toNumberOrNull(pick?.price),
+    priceDisplay: pick?.priceDisplay || null,
+
+    modelProbability: toNumberOrNull(pick?.modelProbability),
+    rawModelProbability: toNumberOrNull(pick?.rawModelProbability),
+    calibratedProbability: toNumberOrNull(pick?.calibratedProbability),
+    impliedProbability: toNumberOrNull(pick?.impliedProbability),
+    fairOdds: toNumberOrNull(pick?.fairOdds),
+    edge: toNumberOrNull(pick?.edge),
+    expectedValue: toNumberOrNull(pick?.expectedValue),
+    confidence: pick?.confidence || null,
+    dataQualityScore: toNumberOrNull(pick?.dataQualityScore),
+
+    betEligible: pick?.betEligible ?? null,
+    recommendedUnits: toNumberOrNull(pick?.recommendedUnits) || 0,
+    stakingTier: pick?.stakingTier || null,
+    stakeRecommendationVersion: pick?.stakeRecommendationVersion || null,
+    betEligibilityReason: pick?.betEligibilityReason || null,
+
+    result: "not_tracked",
+    flatProfitUnits: null,
+    recommendedProfitUnits: null,
+
+    summaryReason: pick?.summaryReason || null,
+    pickDisplay: pick?.pickDisplay || null,
+    reasoning: pick?.reasoning || null,
+    rawPick: pick
   };
 }
 
@@ -231,6 +318,53 @@ async function getDashboardOfficialPicks(date) {
   };
 }
 
+async function getDashboardLivePicks(date) {
+  const [slateResponse, picksResponse] = await Promise.all([
+    getDashboardSlate(date),
+    getPicksForDate(date, {
+      persistSnapshots: false,
+      snapshotMode: "live"
+    })
+  ]);
+
+  const slateMap = buildSlateMap(slateResponse);
+  const rankedLivePicks = buildRankedPicksFromLiveResponse(picksResponse);
+
+  const picks = rankedLivePicks.map((pick, index) => {
+    const gamePk = toNumberOrNull(pick?.gamePk);
+    const slateGame = gamePk === null ? null : slateMap.get(gamePk);
+    return normalizeLivePick(pick, slateGame, index + 1);
+  });
+
+  return {
+    ok: true,
+    date,
+    generatedAt: new Date().toISOString(),
+    basis: {
+      officialOnly: false,
+      source: "On-demand live model pull.",
+      noCap: true,
+      trackingNote:
+        "Live picks are not official locked picks and are not included in official dashboard performance."
+    },
+    gameCount: picksResponse.gameCount,
+    oddsMatchedCount: picksResponse.oddsMatchedCount,
+    pickCount: picks.length,
+    picks,
+    byMarket: {
+      moneyline: picks.filter((pick) => pick.marketType === "moneyline"),
+      runLine: picks.filter((pick) => pick.marketType === "runLine"),
+      totals: picks.filter((pick) => pick.marketType === "totals")
+    },
+    rawCounts: {
+      moneyline: picksResponse?.byMarket?.moneyline?.rankedPickCount || 0,
+      runLine: picksResponse?.byMarket?.runLine?.rankedPickCount || 0,
+      totals: picksResponse?.byMarket?.totals?.rankedPickCount || 0
+    }
+  };
+}
+
 module.exports = {
-  getDashboardOfficialPicks
+  getDashboardOfficialPicks,
+  getDashboardLivePicks
 };

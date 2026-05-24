@@ -10,7 +10,8 @@ const {
   getDashboardSlate
 } = require("../services/dashboardSlateService");
 const {
-  getDashboardOfficialPicks
+  getDashboardOfficialPicks,
+  getDashboardLivePicks
 } = require("../services/dashboardPicksService");
 
 const router = express.Router();
@@ -150,6 +151,31 @@ router.get("/official-picks", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to load dashboard official picks."
+    });
+  }
+});
+
+router.get("/live-picks", async (req, res) => {
+  try {
+    const date =
+      typeof req.query.date === "string" && req.query.date.trim()
+        ? req.query.date.trim()
+        : null;
+
+    if (!date) {
+      return res.status(400).json({
+        ok: false,
+        error: "date query parameter is required in YYYY-MM-DD format."
+      });
+    }
+
+    const result = await getDashboardLivePicks(date);
+
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard live picks."
     });
   }
 });
