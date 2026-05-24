@@ -10,6 +10,9 @@ const {
   applyCalibrationToResponse
 } = require("./calibrationService");
 const {
+  applyStakeRecommendationsToResponse
+} = require("./stakeRecommendationService");
+const {
   buildMatchupKey,
   getEasternDateFromIso
 } = require("../utils/teamUtils");
@@ -149,6 +152,8 @@ async function getPicksForDate(date, options = {}) {
 
   const calibrationProfiles = await getActiveCalibrationProfiles();
   response = applyCalibrationToResponse(response, calibrationProfiles);
+
+  response = applyStakeRecommendationsToResponse(response);
 
   if (persistSnapshots) {
     try {

@@ -37,6 +37,11 @@ async function ensurePickSnapshotTable() {
       confidence TEXT NULL,
       data_quality_score NUMERIC NULL,
       is_actionable BOOLEAN NULL,
+      bet_eligible BOOLEAN NULL,
+      recommended_units NUMERIC NULL,
+      staking_tier TEXT NULL,
+      stake_recommendation_version TEXT NULL,
+      bet_eligibility_reason TEXT NULL,
       summary_reason TEXT NULL,
       pick_display TEXT NULL,
       raw_pick_json JSONB NOT NULL
@@ -48,6 +53,11 @@ async function ensurePickSnapshotTable() {
   await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS official_lock_window TEXT NULL`);
   await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS official_run_id TEXT NULL`);
   await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS rank_within_bucket INTEGER NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS bet_eligible BOOLEAN NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS recommended_units NUMERIC NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS staking_tier TEXT NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS stake_recommendation_version TEXT NULL`);
+  await query(`ALTER TABLE pick_snapshots ADD COLUMN IF NOT EXISTS bet_eligibility_reason TEXT NULL`);
 
   return true;
 }
@@ -146,6 +156,11 @@ async function persistServedPickSnapshot(response, options = {}) {
           confidence,
           data_quality_score,
           is_actionable,
+          bet_eligible,
+          recommended_units,
+          staking_tier,
+          stake_recommendation_version,
+          bet_eligibility_reason,
           summary_reason,
           pick_display,
           raw_pick_json
@@ -154,7 +169,7 @@ async function persistServedPickSnapshot(response, options = {}) {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
           $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-          $31::jsonb
+          $31, $32, $33, $34, $35, $36::jsonb
         )
       `,
       [
@@ -186,6 +201,11 @@ async function persistServedPickSnapshot(response, options = {}) {
         pick?.confidence || null,
         pick?.dataQualityScore ?? null,
         pick?.isActionable ?? null,
+        pick?.betEligible ?? null,
+        pick?.recommendedUnits ?? null,
+        pick?.stakingTier || null,
+        pick?.stakeRecommendationVersion || null,
+        pick?.betEligibilityReason || null,
         pick?.summaryReason || null,
         pick?.pickDisplay || null,
         JSON.stringify(pick)

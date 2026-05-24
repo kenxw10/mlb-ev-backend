@@ -321,10 +321,13 @@ function normalizeTotalsPick(entry) {
 }
 
 function buildMarketSummary(marketType, normalizedPicks) {
+  const rankedPicks = [...normalizedPicks].sort(compareNormalizedPicks);
+
   return {
     marketType,
-    rankedPickCount: normalizedPicks.length,
-    topPicks: normalizedPicks.slice(0, 4)
+    rankedPickCount: rankedPicks.length,
+    rankedPicks,
+    topPicks: rankedPicks.slice(0, 4)
   };
 }
 
@@ -351,13 +354,11 @@ function formatPicksResponse({
     .filter(Boolean)
     .sort(compareNormalizedPicks);
 
-  const topPicksOverall = [
+  const rankedPicksOverall = [
     ...normalizedMoneylinePicks,
     ...normalizedRunLinePicks,
     ...normalizedTotalsPicks
-  ]
-    .sort(compareNormalizedPicks)
-    .slice(0, 4);
+  ].sort(compareNormalizedPicks);
 
   return {
     ok: true,
@@ -366,11 +367,9 @@ function formatPicksResponse({
     slateTimezone: "America/New_York",
     gameCount,
     oddsMatchedCount,
-    totalRankedPickCount:
-      normalizedMoneylinePicks.length +
-      normalizedRunLinePicks.length +
-      normalizedTotalsPicks.length,
-    topPicksOverall,
+    totalRankedPickCount: rankedPicksOverall.length,
+    rankedPicksOverall,
+    topPicksOverall: rankedPicksOverall.slice(0, 4),
     byMarket: {
       moneyline: buildMarketSummary("moneyline", normalizedMoneylinePicks),
       runLine: buildMarketSummary("runLine", normalizedRunLinePicks),
