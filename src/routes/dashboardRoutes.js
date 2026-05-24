@@ -16,6 +16,9 @@ const {
 const {
   getBetPolicyTrackingSummary
 } = require("../services/betPolicyTrackingService");
+const {
+  getDashboardStatus
+} = require("../services/dashboardStatusService");
 
 const router = express.Router();
 
@@ -209,6 +212,24 @@ router.get("/bet-policy-tracking", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to load dashboard bet-policy tracking."
+    });
+  }
+});
+
+router.get("/status", async (req, res) => {
+  try {
+    const date =
+      typeof req.query.date === "string" && req.query.date.trim()
+        ? req.query.date.trim()
+        : null;
+
+    const result = await getDashboardStatus({ date });
+
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard status."
     });
   }
 });
