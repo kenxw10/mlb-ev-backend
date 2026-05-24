@@ -4,6 +4,7 @@ const cors = require("cors");
 const gamesRoutes = require("./routes/gamesRoutes");
 const picksRoutes = require("./routes/picksRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 const apiKeyAuth = require("./middleware/apiKeyAuth");
 
 const app = express();
@@ -22,5 +23,6 @@ app.get("/health", (req, res) => {
 app.use("/v1/games", apiKeyAuth, gamesRoutes);
 app.use("/v1/picks", apiKeyAuth, picksRoutes);
 app.use("/v1/admin", apiKeyAuth, adminRoutes);
+app.use("/v1/dashboard", apiKeyAuth, dashboardRoutes);
 
 module.exports = app;

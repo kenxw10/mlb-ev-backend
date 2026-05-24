@@ -1,0 +1,85 @@
+const express = require("express");
+const {
+  getOfficialDashboardSummary,
+  getOfficialPickHistory
+} = require("../services/dashboardPerformanceService");
+
+const router = express.Router();
+
+router.get("/summary", async (req, res) => {
+  try {
+    const startDate =
+      typeof req.query.startDate === "string" && req.query.startDate.trim()
+        ? req.query.startDate.trim()
+        : null;
+
+    const endDate =
+      typeof req.query.endDate === "string" && req.query.endDate.trim()
+        ? req.query.endDate.trim()
+        : null;
+
+    const result = await getOfficialDashboardSummary({
+      startDate,
+      endDate
+    });
+
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard summary."
+    });
+  }
+});
+
+router.get("/history", async (req, res) => {
+  try {
+    const startDate =
+      typeof req.query.startDate === "string" && req.query.startDate.trim()
+        ? req.query.startDate.trim()
+        : null;
+
+    const endDate =
+      typeof req.query.endDate === "string" && req.query.endDate.trim()
+        ? req.query.endDate.trim()
+        : null;
+
+    const marketType =
+      typeof req.query.marketType === "string" && req.query.marketType.trim()
+        ? req.query.marketType.trim()
+        : null;
+
+    const result =
+      typeof req.query.result === "string" && req.query.result.trim()
+        ? req.query.result.trim()
+        : null;
+
+    const limit =
+      typeof req.query.limit === "string" && req.query.limit.trim()
+        ? req.query.limit.trim()
+        : null;
+
+    const offset =
+      typeof req.query.offset === "string" && req.query.offset.trim()
+        ? req.query.offset.trim()
+        : null;
+
+    const history = await getOfficialPickHistory({
+      startDate,
+      endDate,
+      marketType,
+      result,
+      limit,
+      offset
+    });
+
+    return res.status(history.ok ? 200 : 500).json(history);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard history."
+    });
+  }
+});
+
+module.exports = router;
