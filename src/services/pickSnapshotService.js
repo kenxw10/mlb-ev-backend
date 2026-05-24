@@ -59,6 +59,7 @@ function buildSnapshotRows(response, snapshotMode = "adhoc") {
 
   if (snapshotMode !== "official") {
     const overallPicks = response?.topPicksOverall || [];
+
     for (let index = 0; index < overallPicks.length; index += 1) {
       rows.push({
         sourceBucket: "topPicksOverall",
@@ -70,7 +71,10 @@ function buildSnapshotRows(response, snapshotMode = "adhoc") {
   }
 
   for (const marketName of marketBuckets) {
-    const picks = byMarket?.[marketName]?.topPicks || [];
+    const picks =
+      byMarket?.[marketName]?.rankedPicks ||
+      byMarket?.[marketName]?.topPicks ||
+      [];
 
     for (let index = 0; index < picks.length; index += 1) {
       rows.push({
