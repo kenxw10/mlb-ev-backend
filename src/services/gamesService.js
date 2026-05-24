@@ -124,9 +124,21 @@ function getTeamSeasonStats(teamId, hittingStatsMap, pitchingStatsMap) {
   };
 }
 
+function mapTeamIdentity(teamWrapper) {
+  const team = teamWrapper?.team || {};
+
+  return {
+    id: team.id || null,
+    name: team.name || null,
+    abbreviation: team.abbreviation || team.teamCode || team.fileCode || null
+  };
+}
+
 async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
   const awayTeam = game.teams?.away;
   const homeTeam = game.teams?.home;
+  const awayIdentity = mapTeamIdentity(awayTeam);
+  const homeIdentity = mapTeamIdentity(homeTeam);
 
   const awayProbablePitcher = await enrichProbablePitcher(
     awayTeam?.probablePitcher,
@@ -144,22 +156,21 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
     scheduledEasternDate: getEasternDateFromIso(game.gameDate),
     scheduledEasternTime: getEasternTimeFromIso(game.gameDate),
     status: game.status?.detailedState || null,
+    venueName: game.venue?.name || null,
     awayTeam: {
-      id: awayTeam?.team?.id || null,
-      name: awayTeam?.team?.name || null,
+      ...awayIdentity,
       probablePitcher: awayProbablePitcher,
       teamSeasonStats: getTeamSeasonStats(
-        awayTeam?.team?.id,
+        awayIdentity.id,
         hittingStatsMap,
         pitchingStatsMap
       )
     },
     homeTeam: {
-      id: homeTeam?.team?.id || null,
-      name: homeTeam?.team?.name || null,
+      ...homeIdentity,
       probablePitcher: homeProbablePitcher,
       teamSeasonStats: getTeamSeasonStats(
-        homeTeam?.team?.id,
+        homeIdentity.id,
         hittingStatsMap,
         pitchingStatsMap
       )

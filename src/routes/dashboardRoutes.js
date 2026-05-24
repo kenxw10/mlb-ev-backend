@@ -6,6 +6,9 @@ const {
 const {
   getDashboardCalibrationStatus
 } = require("../services/dashboardCalibrationService");
+const {
+  getDashboardSlate
+} = require("../services/dashboardSlateService");
 
 const router = express.Router();
 
@@ -94,6 +97,31 @@ router.get("/calibration", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to load dashboard calibration status."
+    });
+  }
+});
+
+router.get("/slate", async (req, res) => {
+  try {
+    const date =
+      typeof req.query.date === "string" && req.query.date.trim()
+        ? req.query.date.trim()
+        : null;
+
+    if (!date) {
+      return res.status(400).json({
+        ok: false,
+        error: "date query parameter is required in YYYY-MM-DD format."
+      });
+    }
+
+    const result = await getDashboardSlate(date);
+
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard slate."
     });
   }
 });
