@@ -130,8 +130,18 @@ function normalizeOfficialPickRow(row, slateGame) {
     priceDisplay: rawPick?.priceDisplay || null,
 
     modelProbability: toNumberOrNull(row.model_probability),
-    rawModelProbability: toNumberOrNull(rawPick?.rawModelProbability),
-    calibratedProbability: toNumberOrNull(rawPick?.calibratedProbability),
+    rawModelProbability: toNumberOrNull(
+      rawPick?.rawModelProbability ??
+        rawPick?.rawProbability ??
+        rawPick?.modelProbability ??
+        row.model_probability
+    ),
+    calibratedProbability: toNumberOrNull(
+      rawPick?.calibratedProbability ??
+        rawPick?.calibratedModelProbability ??
+        rawPick?.modelProbability ??
+        row.model_probability
+    ),
     impliedProbability: toNumberOrNull(row.implied_probability),
     fairOdds: toNumberOrNull(row.fair_odds),
     edge: toNumberOrNull(row.edge),
@@ -193,8 +203,16 @@ function normalizeLivePick(pick, slateGame, rankOverall) {
     priceDisplay: pick?.priceDisplay || null,
 
     modelProbability: toNumberOrNull(pick?.modelProbability),
-    rawModelProbability: toNumberOrNull(pick?.rawModelProbability),
-    calibratedProbability: toNumberOrNull(pick?.calibratedProbability),
+    rawModelProbability: toNumberOrNull(
+      pick?.rawModelProbability ??
+        pick?.rawProbability ??
+        pick?.modelProbability
+    ),
+    calibratedProbability: toNumberOrNull(
+      pick?.calibratedProbability ??
+        pick?.calibratedModelProbability ??
+        pick?.modelProbability
+    ),
     impliedProbability: toNumberOrNull(pick?.impliedProbability),
     fairOdds: toNumberOrNull(pick?.fairOdds),
     edge: toNumberOrNull(pick?.edge),
@@ -368,3 +386,4 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
