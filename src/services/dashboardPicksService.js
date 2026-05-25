@@ -80,10 +80,32 @@ function buildRankedPicksFromLiveResponse(picksResponse) {
   });
 }
 
+function getDoubleheaderFields(slateGame, rawPick = {}) {
+  const gameNumber = slateGame?.gameNumber ?? rawPick?.gameNumber ?? null;
+  const seriesGameNumber =
+    slateGame?.seriesGameNumber ?? rawPick?.seriesGameNumber ?? null;
+  const doubleHeader = slateGame?.doubleHeader ?? rawPick?.doubleHeader ?? null;
+  const doubleheaderLabel =
+    slateGame?.doubleheaderLabel ?? rawPick?.doubleheaderLabel ?? null;
+
+  return {
+    gameNumber,
+    seriesGameNumber,
+    doubleHeader,
+    isDoubleheader: Boolean(
+      slateGame?.isDoubleheader ||
+        rawPick?.isDoubleheader ||
+        doubleheaderLabel
+    ),
+    doubleheaderLabel
+  };
+}
+
 function normalizeOfficialPickRow(row, slateGame) {
   const rawPick = parseRawJson(row.raw_pick_json);
   const rawGrade = parseRawJson(row.raw_grade_json);
   const gamePk = toNumberOrNull(row.game_pk);
+  const doubleheaderFields = getDoubleheaderFields(slateGame, rawPick);
 
   const flatProfitUnits = toNumberOrNull(row.profit_units);
   const recommendedUnits = toNumberOrNull(row.recommended_units) || 0;
@@ -311,6 +333,7 @@ async function getDashboardOfficialPicks(date) {
 
   const picks = rows.map((row) => {
     const gamePk = toNumberOrNull(row.game_pk);
+  const doubleheaderFields = getDoubleheaderFields(slateGame, rawPick);
     const slateGame = gamePk === null ? null : slateMap.get(gamePk);
     return normalizeOfficialPickRow(row, slateGame);
   });
@@ -386,4 +409,5 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
 
