@@ -105,7 +105,6 @@ function normalizeOfficialPickRow(row, slateGame) {
   const rawPick = parseRawJson(row.raw_pick_json);
   const rawGrade = parseRawJson(row.raw_grade_json);
   const gamePk = toNumberOrNull(row.game_pk);
-  const doubleheaderFields = getDoubleheaderFields(slateGame, rawPick);
 
   const flatProfitUnits = toNumberOrNull(row.profit_units);
   const recommendedUnits = toNumberOrNull(row.recommended_units) || 0;
@@ -333,7 +332,6 @@ async function getDashboardOfficialPicks(date) {
 
   const picks = rows.map((row) => {
     const gamePk = toNumberOrNull(row.game_pk);
-  const doubleheaderFields = getDoubleheaderFields(slateGame, rawPick);
     const slateGame = gamePk === null ? null : slateMap.get(gamePk);
     return normalizeOfficialPickRow(row, slateGame);
   });
@@ -409,5 +407,6 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
 
 
