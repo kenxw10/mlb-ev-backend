@@ -19,6 +19,9 @@ const {
 const {
   getDashboardStatus
 } = require("../services/dashboardStatusService");
+const {
+  getDashboardMonthlyCalendar
+} = require("../services/dashboardCalendarService");
 
 const router = express.Router();
 
@@ -101,7 +104,6 @@ router.get("/history", async (req, res) => {
 router.get("/calibration", async (req, res) => {
   try {
     const result = await getDashboardCalibrationStatus();
-
     return res.status(result.ok ? 200 : 500).json(result);
   } catch (error) {
     return res.status(500).json({
@@ -126,7 +128,6 @@ router.get("/slate", async (req, res) => {
     }
 
     const result = await getDashboardSlate(date);
-
     return res.status(result.ok ? 200 : 500).json(result);
   } catch (error) {
     return res.status(500).json({
@@ -151,7 +152,6 @@ router.get("/official-picks", async (req, res) => {
     }
 
     const result = await getDashboardOfficialPicks(date);
-
     return res.status(result.ok ? 200 : 500).json(result);
   } catch (error) {
     return res.status(500).json({
@@ -176,7 +176,6 @@ router.get("/live-picks", async (req, res) => {
     }
 
     const result = await getDashboardLivePicks(date);
-
     return res.status(result.ok ? 200 : 500).json(result);
   } catch (error) {
     return res.status(500).json({
@@ -224,12 +223,28 @@ router.get("/status", async (req, res) => {
         : null;
 
     const result = await getDashboardStatus({ date });
-
     return res.status(result.ok ? 200 : 500).json(result);
   } catch (error) {
     return res.status(500).json({
       ok: false,
       error: error.message || "Failed to load dashboard status."
+    });
+  }
+});
+
+router.get("/monthly-calendar", async (req, res) => {
+  try {
+    const month =
+      typeof req.query.month === "string" && req.query.month.trim()
+        ? req.query.month.trim()
+        : null;
+
+    const result = await getDashboardMonthlyCalendar({ month });
+    return res.status(result.ok ? 200 : 400).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard monthly calendar."
     });
   }
 });
