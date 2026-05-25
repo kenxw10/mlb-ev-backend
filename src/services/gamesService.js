@@ -134,6 +134,69 @@ function mapTeamIdentity(teamWrapper) {
   };
 }
 
+function toIntegerOrNull(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function getRawDoubleheaderMetadata(game) {
+  const gameNumber = toIntegerOrNull(game?.gameNumber);
+  const seriesGameNumber = toIntegerOrNull(game?.seriesGameNumber);
+  const doubleHeader = game?.doubleHeader || null;
+  const isExplicitDoubleheader =
+    Boolean(doubleHeader) && String(doubleHeader).toUpperCase() !== "N";
+
+  return {
+    gameNumber,
+    seriesGameNumber,
+    doubleHeader,
+    isDoubleheader: isExplicitDoubleheader,
+    doubleheaderLabel:
+      isExplicitDoubleheader && gameNumber ? `Game ${gameNumber}` : null
+  };
+}
+
+function applyDoubleheaderFallbacks(games) {
+  const groups = new Map();
+
+  for (const game of games) {
+    const awayId = game?.awayTeam?.id || "away";
+    const homeId = game?.homeTeam?.id || "home";
+    const date = game?.scheduledEasternDate || "date";
+    const key = `${date}|${awayId}|${homeId}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+
+    groups.get(key).push(game);
+  }
+
+  for (const group of groups.values()) {
+    if (group.length <= 1) {
+      continue;
+    }
+
+    group.sort((a, b) => new Date(a.gameDate) - new Date(b.gameDate));
+
+    group.forEach((game, index) => {
+      const fallbackGameNumber = game.gameNumber || index + 1;
+
+      game.gameNumber = fallbackGameNumber;
+      game.seriesGameNumber = game.seriesGameNumber || fallbackGameNumber;
+      game.doubleHeader = game.doubleHeader || "Y";
+      game.isDoubleheader = true;
+      game.doubleheaderLabel = game.doubleheaderLabel || `Game ${fallbackGameNumber}`;
+    });
+  }
+
+  return games;
+}
+
 async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
   const awayTeam = game.teams?.away;
   const homeTeam = game.teams?.home;
@@ -150,11 +213,18 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
     season
   );
 
+  const doubleheaderMetadata = getRawDoubleheaderMetadata(game);
+
   return {
     gamePk: game.gamePk,
     gameDate: game.gameDate,
     scheduledEasternDate: getEasternDateFromIso(game.gameDate),
     scheduledEasternTime: getEasternTimeFromIso(game.gameDate),
+    gameNumber: doubleheaderMetadata.gameNumber,
+    seriesGameNumber: doubleheaderMetadata.seriesGameNumber,
+    doubleHeader: doubleheaderMetadata.doubleHeader,
+    isDoubleheader: doubleheaderMetadata.isDoubleheader,
+    doubleheaderLabel: doubleheaderMetadata.doubleheaderLabel,
     status: game.status?.detailedState || null,
     venueName: game.venue?.name || null,
     awayTeam: {
@@ -212,6 +282,7 @@ async function getGamesForDate(date) {
   );
 
   games.sort((a, b) => new Date(a.gameDate) - new Date(b.gameDate));
+  applyDoubleheaderFallbacks(games);
 
   return {
     ok: true,
@@ -225,3 +296,4 @@ async function getGamesForDate(date) {
 module.exports = {
   getGamesForDate
 };
+

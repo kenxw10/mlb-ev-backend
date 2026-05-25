@@ -54,6 +54,11 @@ function normalizeSlateGame(game) {
     gameDate: game?.gameDate || null,
     scheduledEasternDate: game?.scheduledEasternDate || null,
     scheduledEasternTime: game?.scheduledEasternTime || null,
+    gameNumber: game?.gameNumber || null,
+    seriesGameNumber: game?.seriesGameNumber || null,
+    doubleHeader: game?.doubleHeader || null,
+    isDoubleheader: Boolean(game?.isDoubleheader),
+    doubleheaderLabel: game?.doubleheaderLabel || null,
     status: game?.status || null,
     venueName: game?.venueName || null,
     matchup: `${awayName} at ${homeName}`,
@@ -64,8 +69,9 @@ function normalizeSlateGame(game) {
       home: homeTeam.probablePitcher
     },
     frontendLabels: {
-      shortMatchup: `${awayAbbrev} @ ${homeAbbrev}`,
-      fullMatchup: `${awayName} at ${homeName}`,
+      shortMatchup: `${awayAbbrev} @ ${homeAbbrev}${game?.doubleheaderLabel ? ` (${game.doubleheaderLabel})` : ""}`,
+      fullMatchup: `${awayName} at ${homeName}${game?.doubleheaderLabel ? ` (${game.doubleheaderLabel})` : ""}`,
+      doubleheaderLabel: game?.doubleheaderLabel || null,
       timeLabel: game?.scheduledEasternTime
         ? `${game.scheduledEasternTime} ET`
         : null,
@@ -95,3 +101,4 @@ async function getDashboardSlate(date) {
 module.exports = {
   getDashboardSlate
 };
+
