@@ -2,7 +2,7 @@ const { query, isDatabaseEnabled } = require("../config/db");
 const { getDashboardSlate } = require("./dashboardSlateService");
 const { getPicksForDate } = require("./picksService");
 
-const OFFICIAL_MARKET_BUCKETS = ["moneyline", "runLine", "totals"];
+const OFFICIAL_MARKET_BUCKETS = ["moneyline", "runLine"];
 
 function toNumberOrNull(value) {
   if (value === null || value === undefined || value === "") {
@@ -56,8 +56,7 @@ function buildSlateMap(slateResponse) {
 function buildRankedPicksFromLiveResponse(picksResponse) {
   return [
     ...(picksResponse?.byMarket?.moneyline?.rankedPicks || []),
-    ...(picksResponse?.byMarket?.runLine?.rankedPicks || []),
-    ...(picksResponse?.byMarket?.totals?.rankedPicks || [])
+    ...(picksResponse?.byMarket?.runLine?.rankedPicks || [])
   ].sort((a, b) => {
     const aUnits = toNumberOrNull(a?.recommendedUnits) || 0;
     const bUnits = toNumberOrNull(b?.recommendedUnits) || 0;
@@ -362,7 +361,7 @@ async function getDashboardOfficialPicks(date) {
     byMarket: {
       moneyline: picks.filter((pick) => pick.marketType === "moneyline"),
       runLine: picks.filter((pick) => pick.marketType === "runLine"),
-      totals: picks.filter((pick) => pick.marketType === "totals")
+      totals: []
     }
   };
 }
@@ -403,12 +402,12 @@ async function getDashboardLivePicks(date) {
     byMarket: {
       moneyline: picks.filter((pick) => pick.marketType === "moneyline"),
       runLine: picks.filter((pick) => pick.marketType === "runLine"),
-      totals: picks.filter((pick) => pick.marketType === "totals")
+      totals: []
     },
     rawCounts: {
       moneyline: picksResponse?.byMarket?.moneyline?.rankedPickCount || 0,
       runLine: picksResponse?.byMarket?.runLine?.rankedPickCount || 0,
-      totals: picksResponse?.byMarket?.totals?.rankedPickCount || 0
+      totals: 0
     }
   };
 }
@@ -417,6 +416,7 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
 
 
 

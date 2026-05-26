@@ -216,7 +216,7 @@ async function getDashboardMonthlyCalendar(options = {}) {
       GROUP BY ps.requested_date
       ORDER BY ps.requested_date ASC
     `,
-    [startDate, monthEnd, ["moneyline", "runLine", "totals"]]
+    [startDate, monthEnd, ["moneyline", "runLine"]]
   );
 
   const mergedDays = mergeRowsIntoDays(days, result?.rows || []);
@@ -247,3 +247,4 @@ async function getDashboardMonthlyCalendar(options = {}) {
 module.exports = {
   getDashboardMonthlyCalendar
 };
+

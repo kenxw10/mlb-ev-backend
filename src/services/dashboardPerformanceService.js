@@ -3,7 +3,7 @@ const { query, isDatabaseEnabled } = require("../config/db");
 const DASHBOARD_HISTORY_START_DATE =
   process.env.DASHBOARD_HISTORY_START_DATE || "2026-05-24";
 
-const OFFICIAL_MARKET_BUCKETS = ["moneyline", "runLine", "totals"];
+const OFFICIAL_MARKET_BUCKETS = ["moneyline", "runLine"];
 
 function toNumberOrNull(value) {
   if (value === null || value === undefined || value === "") {
@@ -394,3 +394,4 @@ module.exports = {
   getOfficialDashboardSummary,
   getOfficialPickHistory
 };
+
