@@ -333,14 +333,37 @@ async function upsertClvSnapshot(snapshotRow, odds, captureType) {
       )
       ON CONFLICT (snapshot_id, capture_type) DO UPDATE
       SET captured_at = NOW(),
-          current_sportsbook = EXCLUDED.current_sportsbook,
-          current_price = EXCLUDED.current_price,
-          current_line = EXCLUDED.current_line,
+          current_sportsbook = CASE
+            WHEN EXCLUDED.current_price IS NULL THEN clv_line_snapshots.current_sportsbook
+            ELSE EXCLUDED.current_sportsbook
+          END,
+          current_price = CASE
+            WHEN EXCLUDED.current_price IS NULL THEN clv_line_snapshots.current_price
+            ELSE EXCLUDED.current_price
+          END,
+          current_line = CASE
+            WHEN EXCLUDED.current_price IS NULL THEN clv_line_snapshots.current_line
+            ELSE EXCLUDED.current_line
+          END,
           locked_implied_probability = EXCLUDED.locked_implied_probability,
-          current_implied_probability = EXCLUDED.current_implied_probability,
-          implied_probability_move = EXCLUDED.implied_probability_move,
-          american_price_delta = EXCLUDED.american_price_delta,
-          clv_status = EXCLUDED.clv_status,
+          current_implied_probability = CASE
+            WHEN EXCLUDED.current_price IS NULL THEN clv_line_snapshots.current_implied_probability
+            ELSE EXCLUDED.current_implied_probability
+          END,
+          implied_probability_move = CASE
+            WHEN EXCLUDED.current_price IS NULL THEN clv_line_snapshots.implied_probability_move
+            ELSE EXCLUDED.implied_probability_move
+          END,
+          american_price_delta = CASE
+            WHEN EXCLUDED.current_price IS NULL THEN clv_line_snapshots.american_price_delta
+            ELSE EXCLUDED.american_price_delta
+          END,
+          clv_status = CASE
+            WHEN EXCLUDED.current_price IS NULL
+              AND clv_line_snapshots.current_price IS NOT NULL
+              THEN clv_line_snapshots.clv_status
+            ELSE EXCLUDED.clv_status
+          END,
           raw_clv_json = EXCLUDED.raw_clv_json
       RETURNING *
     `,
@@ -514,3 +537,5 @@ module.exports = {
   getClvTrackingForDate,
   captureClvForDate
 };
+
+
