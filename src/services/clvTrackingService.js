@@ -125,6 +125,159 @@ function mapMarketFromBookmakers(bookmakers, marketKey) {
   });
 }
 
+
+function parseDateOrNull(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getEasternOffsetMinutesForDate(dateString) {
+  const sampleUtc = new Date(`${dateString}T12:00:00Z`);
+
+  if (Number.isNaN(sampleUtc.getTime())) {
+    return null;
+  }
+
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    timeZoneName: "shortOffset"
+  });
+
+  const timeZonePart = formatter
+    .formatToParts(sampleUtc)
+    .find((part) => part.type === "timeZoneName");
+
+  const value = timeZonePart?.value || "";
+  const match = value.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  const sign = hours < 0 ? -1 : 1;
+
+  return hours * 60 + sign * minutes;
+}
+
+function parseEasternWallTimeToUtc(dateString, timeString) {
+  const normalizedDate = formatDateValue(dateString);
+
+  if (!normalizedDate || !timeString) {
+    return null;
+  }
+
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalizedDate);
+
+  if (!dateMatch) {
+    return null;
+  }
+
+  const cleanTime = String(timeString)
+    .replace(/\s*ET$/i, "")
+    .trim();
+
+  let hour = null;
+  let minute = null;
+
+  const twelveHourMatch = /^(\d{1,2}):(\d{2})\s*([AP]M)$/i.exec(cleanTime);
+  const twentyFourHourMatch = /^(\d{1,2}):(\d{2})/.exec(cleanTime);
+
+  if (twelveHourMatch) {
+    hour = Number(twelveHourMatch[1]);
+    minute = Number(twelveHourMatch[2]);
+
+    const meridiem = twelveHourMatch[3].toUpperCase();
+
+    if (meridiem === "PM" && hour !== 12) {
+      hour += 12;
+    }
+
+    if (meridiem === "AM" && hour === 12) {
+      hour = 0;
+    }
+  } else if (twentyFourHourMatch) {
+    hour = Number(twentyFourHourMatch[1]);
+    minute = Number(twentyFourHourMatch[2]);
+  }
+
+  if (
+    hour === null ||
+    minute === null ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
+  const offsetMinutes = getEasternOffsetMinutesForDate(normalizedDate);
+
+  if (offsetMinutes === null) {
+    return null;
+  }
+
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+
+  return new Date(Date.UTC(year, month - 1, day, hour, minute) - offsetMinutes * 60 * 1000);
+}
+
+function getSnapshotScheduledStartUtc(snapshotRow, odds) {
+  const oddsStart = parseDateOrNull(odds?.commenceTime);
+
+  if (oddsStart) {
+    return oddsStart;
+  }
+
+  const rawPick = parseRawJson(snapshotRow.raw_pick_json);
+
+  const directStart =
+    parseDateOrNull(rawPick?.commenceTime) ||
+    parseDateOrNull(rawPick?.commenceTimeUtc) ||
+    parseDateOrNull(rawPick?.gameStartTimeUtc) ||
+    parseDateOrNull(rawPick?.scheduledStartUtc) ||
+    parseDateOrNull(rawPick?.gameDate);
+
+  if (directStart) {
+    return directStart;
+  }
+
+  return parseEasternWallTimeToUtc(
+    snapshotRow.scheduled_eastern_date || rawPick?.scheduledEasternDate,
+    snapshotRow.scheduled_eastern_time || rawPick?.scheduledEasternTime
+  );
+}
+
+function getPregameCaptureContext(snapshotRow, odds, now = new Date()) {
+  const gameStart = getSnapshotScheduledStartUtc(snapshotRow, odds);
+
+  if (!gameStart) {
+    return {
+      captureAllowed: true,
+      gameStarted: false,
+      gameStartTimeUtc: null,
+      reason: "missing_game_start_time"
+    };
+  }
+
+  const gameStarted = now.getTime() >= gameStart.getTime();
+
+  return {
+    captureAllowed: !gameStarted,
+    gameStarted,
+    gameStartTimeUtc: gameStart.toISOString(),
+    reason: gameStarted ? "game_already_started" : "pregame"
+  };
+}
+
 function buildOddsMap(oddsEvents, requestedDate) {
   const oddsMap = {};
 
@@ -537,5 +690,6 @@ module.exports = {
   getClvTrackingForDate,
   captureClvForDate
 };
+
 
 

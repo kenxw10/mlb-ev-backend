@@ -348,16 +348,6 @@ async function runDueOfficialGrade(now = new Date()) {
 }
 
 async function runDueClvCapture(now = new Date()) {
-  const captureWindow = getMatchingClvCaptureWindow(now);
-
-  if (!captureWindow) {
-    return {
-      ok: true,
-      ran: false,
-      reason: "No CLV capture window is due right now."
-    };
-  }
-
   const requestedDate = getEasternDateString(now);
   const hasOfficialLock = await hasCompletedOfficialLockForDate(requestedDate);
 
@@ -366,19 +356,18 @@ async function runDueClvCapture(now = new Date()) {
       ok: true,
       ran: false,
       requestedDate,
-      captureWindow,
       reason: "No completed official lock exists for this date."
     };
   }
 
   const result = await captureClvForDate(requestedDate, {
-    captureType: "closing_proxy"
+    captureType: "closing_proxy",
+    now
   });
 
   return {
     ...result,
-    ran: result.ok !== false,
-    captureWindow
+    ran: result.ok !== false
   };
 }
 
@@ -394,5 +383,6 @@ module.exports = {
   runDueClvCapture,
   ensureOfficialAutomationTables
 };
+
 
 
