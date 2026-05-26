@@ -23,6 +23,11 @@ const {
   runOfficialGradeForDate
 } = require("../services/officialAutomationService");
 
+const {
+  getBetExecutionRecordsForDate,
+  upsertBetExecutionRecord
+} = require("../services/betExecutionService");
+
 const router = express.Router();
 
 router.get("/grade-results", async (req, res) => {
@@ -235,4 +240,39 @@ router.get("/official-grade", async (req, res) => {
   }
 });
 
+
+router.get("/execution", async (req, res) => {
+  try {
+    const date = typeof req.query.date === "string" ? req.query.date.trim() : "";
+
+    if (!date || !isValidDateString(date)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid date query parameter is required in YYYY-MM-DD format."
+      });
+    }
+
+    const result = await getBetExecutionRecordsForDate(date);
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load execution records."
+    });
+  }
+});
+
+router.post("/execution", async (req, res) => {
+  try {
+    const result = await upsertBetExecutionRecord(req.body || {});
+    return res.status(result.ok ? 200 : 400).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to save execution record."
+    });
+  }
+});
+
 module.exports = router;
+
