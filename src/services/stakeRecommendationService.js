@@ -50,6 +50,108 @@ function roundNumber(value, decimals = 4) {
   return Number(numericValue.toFixed(decimals));
 }
 
+function formatAmericanOdds(value) {
+  const numericValue = toNumberOrNull(value);
+
+  if (numericValue === null) {
+    return null;
+  }
+
+  return numericValue > 0 ? `+${Math.trunc(numericValue)}` : String(Math.trunc(numericValue));
+}
+
+function profitPerUnitToAmericanOdds(profitPerUnit) {
+  const profit = toNumberOrNull(profitPerUnit);
+
+  if (profit === null || profit <= 0) {
+    return null;
+  }
+
+  const rawOdds = profit >= 1 ? profit * 100 : -100 / profit;
+
+  return Math.ceil(rawOdds);
+}
+
+function getActiveModelProbability(pick) {
+  return (
+    toNumberOrNull(pick?.calibratedProbability) ??
+    toNumberOrNull(pick?.modelProbability)
+  );
+}
+
+function getMinimumAcceptableOddsForPick(pick, config) {
+  if (!config?.enabled || config.minEv === null || config.minEdge === null) {
+    return null;
+  }
+
+  const modelProbability = getActiveModelProbability(pick);
+
+  if (modelProbability === null || modelProbability <= 0 || modelProbability >= 1) {
+    return null;
+  }
+
+  const maxImpliedProbabilityFromEdge = modelProbability - config.minEdge;
+
+  if (maxImpliedProbabilityFromEdge <= 0 || maxImpliedProbabilityFromEdge >= 1) {
+    return null;
+  }
+
+  const minProfitPerUnitFromEv =
+    (config.minEv + 1 - modelProbability) / modelProbability;
+
+  const minProfitPerUnitFromEdge =
+    (1 - maxImpliedProbabilityFromEdge) / maxImpliedProbabilityFromEdge;
+
+  const requiredProfitPerUnit = Math.max(
+    minProfitPerUnitFromEv,
+    minProfitPerUnitFromEdge
+  );
+
+  return profitPerUnitToAmericanOdds(requiredProfitPerUnit);
+}
+
+function getBettingEdgeStatus(recommendation, minimumAcceptableOdds) {
+  if (!recommendation?.betEligible) {
+    return "not_bet_eligible";
+  }
+
+  if (minimumAcceptableOdds === null || minimumAcceptableOdds === undefined) {
+    return "minimum_odds_unavailable";
+  }
+
+  return "bettable_at_lock";
+}
+
+function buildBettingEdgeReason(pick, recommendation, minimumAcceptableOdds, config) {
+  if (!recommendation?.betEligible) {
+    return recommendation?.betEligibilityReason || "Pick is not bet eligible.";
+  }
+
+  if (minimumAcceptableOdds === null || minimumAcceptableOdds === undefined) {
+    return "Pick is bet eligible at lock, but minimum acceptable odds could not be calculated.";
+  }
+
+  return (
+    `At lock, this pick remains bettable only if the available price is ` +
+    `${formatAmericanOdds(minimumAcceptableOdds)} or better, based on ` +
+    `EV >= ${(config.minEv * 100).toFixed(1)}% and edge >= ${(config.minEdge * 100).toFixed(1)}%.`
+  );
+}
+
+function buildMinimumAcceptableOddsBasis(pick, config) {
+  if (!config?.enabled) {
+    return null;
+  }
+
+  return {
+    marketType: pick?.marketType || null,
+    modelProbability: roundNumber(getActiveModelProbability(pick), 6),
+    minimumEv: config.minEv,
+    minimumEdge: config.minEdge,
+    policyVersion: STAKE_RECOMMENDATION_VERSION
+  };
+}
+
 function buildNoBetResult(reason) {
   return {
     betEligible: false,
@@ -114,6 +216,12 @@ function getStakeRecommendationForPick(pick) {
 
 function applyStakeRecommendationToPick(pick) {
   const recommendation = getStakeRecommendationForPick(pick);
+  const config = STAKE_CONFIG[pick?.marketType] || null;
+  const minimumAcceptableOdds = getMinimumAcceptableOddsForPick(pick, config);
+  const bettingEdgeStatus = getBettingEdgeStatus(
+    recommendation,
+    minimumAcceptableOdds
+  );
 
   return {
     ...pick,
@@ -121,7 +229,17 @@ function applyStakeRecommendationToPick(pick) {
     recommendedUnits: roundNumber(recommendation.recommendedUnits, 2),
     stakingTier: recommendation.stakingTier,
     stakeRecommendationVersion: recommendation.stakeRecommendationVersion,
-    betEligibilityReason: recommendation.betEligibilityReason
+    betEligibilityReason: recommendation.betEligibilityReason,
+    minimumAcceptableOdds,
+    minimumAcceptableOddsDisplay: formatAmericanOdds(minimumAcceptableOdds),
+    bettingEdgeStatus,
+    bettingEdgeReason: buildBettingEdgeReason(
+      pick,
+      recommendation,
+      minimumAcceptableOdds,
+      config
+    ),
+    minimumAcceptableOddsBasis: buildMinimumAcceptableOddsBasis(pick, config)
   };
 }
 
@@ -194,3 +312,4 @@ module.exports = {
   applyStakeRecommendationToPick,
   applyStakeRecommendationsToResponse
 };
+

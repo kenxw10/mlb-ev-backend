@@ -149,6 +149,11 @@ function normalizeOfficialPickRow(row, slateGame) {
     sportsbook: row.sportsbook,
     price: toNumberOrNull(row.price),
     priceDisplay: rawPick?.priceDisplay || null,
+    minimumAcceptableOdds: toNumberOrNull(rawPick?.minimumAcceptableOdds),
+    minimumAcceptableOddsDisplay: rawPick?.minimumAcceptableOddsDisplay || null,
+    bettingEdgeStatus: rawPick?.bettingEdgeStatus || null,
+    bettingEdgeReason: rawPick?.bettingEdgeReason || null,
+    minimumAcceptableOddsBasis: rawPick?.minimumAcceptableOddsBasis || null,
 
     modelProbability: toNumberOrNull(row.model_probability),
     rawModelProbability: toNumberOrNull(
@@ -222,6 +227,11 @@ function normalizeLivePick(pick, slateGame, rankOverall) {
     sportsbook: pick?.sportsbook || null,
     price: toNumberOrNull(pick?.price),
     priceDisplay: pick?.priceDisplay || null,
+    minimumAcceptableOdds: toNumberOrNull(pick?.minimumAcceptableOdds),
+    minimumAcceptableOddsDisplay: pick?.minimumAcceptableOddsDisplay || null,
+    bettingEdgeStatus: pick?.bettingEdgeStatus || null,
+    bettingEdgeReason: pick?.bettingEdgeReason || null,
+    minimumAcceptableOddsBasis: pick?.minimumAcceptableOddsBasis || null,
 
     modelProbability: toNumberOrNull(pick?.modelProbability),
     rawModelProbability: toNumberOrNull(
@@ -407,6 +417,7 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
 
 
 
