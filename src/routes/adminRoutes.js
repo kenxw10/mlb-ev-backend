@@ -28,6 +28,11 @@ const {
   upsertBetExecutionRecord
 } = require("../services/betExecutionService");
 
+const {
+  getClvTrackingForDate,
+  captureClvForDate
+} = require("../services/clvTrackingService");
+
 const router = express.Router();
 
 router.get("/grade-results", async (req, res) => {
@@ -274,5 +279,66 @@ router.post("/execution", async (req, res) => {
   }
 });
 
+
+router.get("/clv", async (req, res) => {
+  try {
+    const date = typeof req.query.date === "string" ? req.query.date.trim() : "";
+
+    if (!date || !isValidDateString(date)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid date query parameter is required in YYYY-MM-DD format."
+      });
+    }
+
+    const captureType =
+      typeof req.query.captureType === "string" && req.query.captureType.trim()
+        ? req.query.captureType.trim()
+        : undefined;
+
+    const result = await getClvTrackingForDate(date, { captureType });
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load CLV tracking records."
+    });
+  }
+});
+
+router.post("/clv/capture", async (req, res) => {
+  try {
+    const date =
+      typeof req.query.date === "string" && req.query.date.trim()
+        ? req.query.date.trim()
+        : typeof req.body?.date === "string"
+          ? req.body.date.trim()
+          : "";
+
+    if (!date || !isValidDateString(date)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid date is required in YYYY-MM-DD format."
+      });
+    }
+
+    const captureType =
+      typeof req.query.captureType === "string" && req.query.captureType.trim()
+        ? req.query.captureType.trim()
+        : typeof req.body?.captureType === "string" && req.body.captureType.trim()
+          ? req.body.captureType.trim()
+          : undefined;
+
+    const result = await captureClvForDate(date, { captureType });
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to capture CLV records."
+    });
+  }
+});
+
 module.exports = router;
+
 
