@@ -4,6 +4,7 @@ const { getPicksForDate } = require("./picksService");
 const { gradeSnapshotsForDate } = require("./pickGradingService");
 const { maybeAutoFitEligibleMarkets } = require("./calibrationService");
 const { rebuildBetPolicyTracking } = require("./betPolicyTrackingService");
+const { captureClvForDate } = require("./clvTrackingService");
 
 const LOCK_WINDOWS = {
   daily: { hour: 9, minute: 0 }
@@ -11,6 +12,13 @@ const LOCK_WINDOWS = {
 
 const MIN_MINUTES_TO_START = 45;
 const EXECUTION_WINDOW_MINUTES = 14;
+
+const CLV_CAPTURE_WINDOWS = {
+  midday: { hour: 12, minute: 0 },
+  afternoon: { hour: 15, minute: 0 },
+  evening: { hour: 18, minute: 0 },
+  late: { hour: 21, minute: 0 }
+};
 
 function getEasternParts(date = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -60,6 +68,18 @@ function getMatchingLockWindow(date = new Date()) {
   const nowMinutes = easternMinutesOfDay(date);
 
   for (const [label, config] of Object.entries(LOCK_WINDOWS)) {
+    if (isWithinWindow(nowMinutes, config.hour, config.minute)) {
+      return label;
+    }
+  }
+
+  return null;
+}
+
+function getMatchingClvCaptureWindow(date = new Date()) {
+  const nowMinutes = easternMinutesOfDay(date);
+
+  for (const [label, config] of Object.entries(CLV_CAPTURE_WINDOWS)) {
     if (isWithinWindow(nowMinutes, config.hour, config.minute)) {
       return label;
     }
@@ -272,6 +292,23 @@ async function runOfficialGradeForDate(requestedDate) {
   }
 }
 
+async function hasCompletedOfficialLockForDate(requestedDate) {
+  await ensureOfficialAutomationTables();
+
+  const result = await query(
+    `
+      SELECT 1
+      FROM official_lock_runs
+      WHERE requested_date = $1::date
+        AND status = 'completed'
+      LIMIT 1
+    `,
+    [requestedDate]
+  );
+
+  return Boolean(result?.rows?.length);
+}
+
 async function runDueOfficialLock(now = new Date()) {
   const lockWindow = getMatchingLockWindow(now);
 
@@ -310,6 +347,41 @@ async function runDueOfficialGrade(now = new Date()) {
   };
 }
 
+async function runDueClvCapture(now = new Date()) {
+  const captureWindow = getMatchingClvCaptureWindow(now);
+
+  if (!captureWindow) {
+    return {
+      ok: true,
+      ran: false,
+      reason: "No CLV capture window is due right now."
+    };
+  }
+
+  const requestedDate = getEasternDateString(now);
+  const hasOfficialLock = await hasCompletedOfficialLockForDate(requestedDate);
+
+  if (!hasOfficialLock) {
+    return {
+      ok: true,
+      ran: false,
+      requestedDate,
+      captureWindow,
+      reason: "No completed official lock exists for this date."
+    };
+  }
+
+  const result = await captureClvForDate(requestedDate, {
+    captureType: "closing_proxy"
+  });
+
+  return {
+    ...result,
+    ran: result.ok !== false,
+    captureWindow
+  };
+}
+
 module.exports = {
   LOCK_WINDOWS,
   getEasternDateString,
@@ -320,3 +392,4 @@ module.exports = {
   runDueOfficialGrade,
   ensureOfficialAutomationTables
 };
+

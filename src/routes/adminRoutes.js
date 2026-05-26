@@ -33,6 +33,8 @@ const {
   captureClvForDate
 } = require("../services/clvTrackingService");
 
+const { runDueClvCapture } = require("../services/officialAutomationService");
+
 const router = express.Router();
 
 router.get("/grade-results", async (req, res) => {
@@ -339,6 +341,20 @@ router.post("/clv/capture", async (req, res) => {
   }
 });
 
+
+router.post("/clv/capture-due", async (req, res) => {
+  try {
+    const result = await runDueClvCapture(new Date());
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to run due CLV capture."
+    });
+  }
+});
+
 module.exports = router;
+
 
 
