@@ -384,12 +384,15 @@ async function runDueClvCapture(now = new Date()) {
 
 module.exports = {
   LOCK_WINDOWS,
+  CLV_CAPTURE_WINDOWS,
   getEasternDateString,
   getYesterdayEasternDateString,
   runOfficialLockForDateWindow,
   runOfficialGradeForDate,
   runDueOfficialLock,
   runDueOfficialGrade,
+  runDueClvCapture,
   ensureOfficialAutomationTables
 };
+
 
