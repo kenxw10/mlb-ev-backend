@@ -23,6 +23,10 @@ const {
   getDashboardMonthlyCalendar
 } = require("../services/dashboardCalendarService");
 
+const {
+  getDashboardExecutionPerformance
+} = require("../services/dashboardExecutionPerformanceService");
+
 const router = express.Router();
 
 router.get("/summary", async (req, res) => {
@@ -249,4 +253,32 @@ router.get("/monthly-calendar", async (req, res) => {
   }
 });
 
+
+router.get("/execution-performance", async (req, res) => {
+  try {
+    const startDate =
+      typeof req.query.startDate === "string" && req.query.startDate.trim()
+        ? req.query.startDate.trim()
+        : null;
+
+    const endDate =
+      typeof req.query.endDate === "string" && req.query.endDate.trim()
+        ? req.query.endDate.trim()
+        : null;
+
+    const result = await getDashboardExecutionPerformance({
+      startDate,
+      endDate
+    });
+
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load dashboard execution performance."
+    });
+  }
+});
+
 module.exports = router;
+
