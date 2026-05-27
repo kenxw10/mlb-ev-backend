@@ -113,6 +113,11 @@ function normalizeOfficialPickRow(row, slateGame) {
       ? null
       : Number((flatProfitUnits * recommendedUnits).toFixed(4));
 
+  const clvCurrentPrice = toNumberOrNull(row.clv_current_price);
+  const clvImpliedProbabilityMove = toNumberOrNull(row.clv_implied_probability_move);
+  const clvAmericanPriceDelta = toNumberOrNull(row.clv_american_price_delta);
+  const clvStatus = row.clv_status || "not_captured";
+
   return {
     snapshotId: row.snapshot_id,
     batchId: row.batch_id,
@@ -149,7 +154,17 @@ function normalizeOfficialPickRow(row, slateGame) {
     sportsbook: row.sportsbook,
     price: toNumberOrNull(row.price),
     priceDisplay: rawPick?.priceDisplay || null,
-    minimumAcceptableOdds: toNumberOrNull(rawPick?.minimumAcceptableOdds),
+    clv: {
+      captureType: row.clv_capture_type || "closing_proxy",
+      capturedAt: row.clv_captured_at || null,
+      currentSportsbook: row.clv_current_sportsbook || null,
+      currentPrice: clvCurrentPrice,
+      currentPriceDisplay: formatAmericanOdds(clvCurrentPrice),
+      currentLine: toNumberOrNull(row.clv_current_line),
+      impliedProbabilityMove: clvImpliedProbabilityMove,
+      americanPriceDelta: clvAmericanPriceDelta,
+      status: clvStatus
+    },    minimumAcceptableOdds: toNumberOrNull(rawPick?.minimumAcceptableOdds),
     minimumAcceptableOddsDisplay: rawPick?.minimumAcceptableOddsDisplay || null,
     bettingEdgeStatus: rawPick?.bettingEdgeStatus || null,
     bettingEdgeReason: rawPick?.bettingEdgeReason || null,
@@ -318,6 +333,14 @@ async function getDashboardOfficialPicks(date) {
           ps.summary_reason,
           ps.pick_display,
           ps.raw_pick_json,
+          clv.capture_type AS clv_capture_type,
+          clv.captured_at AS clv_captured_at,
+          clv.current_sportsbook AS clv_current_sportsbook,
+          clv.current_price AS clv_current_price,
+          clv.current_line AS clv_current_line,
+          clv.implied_probability_move AS clv_implied_probability_move,
+          clv.american_price_delta AS clv_american_price_delta,
+          clv.clv_status AS clv_status,
           g.graded_at,
           g.outcome,
           g.away_score,
@@ -327,6 +350,9 @@ async function getDashboardOfficialPicks(date) {
         FROM pick_snapshots ps
         LEFT JOIN graded_pick_results g
           ON g.snapshot_id = ps.id
+        LEFT JOIN clv_line_snapshots clv
+          ON clv.snapshot_id = ps.id
+          AND clv.capture_type = 'closing_proxy'
         WHERE ps.snapshot_mode = 'official'
           AND ps.requested_date = $1::date
           AND ps.source_bucket = ANY($2::text[])
@@ -419,6 +445,8 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
+
 
 
 
