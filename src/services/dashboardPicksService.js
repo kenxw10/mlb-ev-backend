@@ -1,6 +1,7 @@
 const { query, isDatabaseEnabled } = require("../config/db");
 const { getDashboardSlate } = require("./dashboardSlateService");
 const { getPicksForDate } = require("./picksService");
+const { ensureClvLineSnapshotsTable } = require("./clvTrackingService");
 
 const OFFICIAL_MARKET_BUCKETS = ["moneyline", "runLine"];
 
@@ -275,6 +276,8 @@ async function getDashboardOfficialPicks(date) {
     };
   }
 
+  await ensureClvLineSnapshotsTable();
+
   const [slateResponse, snapshotResult] = await Promise.all([
     getDashboardSlate(date),
     query(
@@ -416,6 +419,7 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
 
 
 
