@@ -1,4 +1,5 @@
 const { query, isDatabaseEnabled } = require("../config/db");
+const { ensureClvLineSnapshotsTable } = require("./clvTrackingService");
 
 const DASHBOARD_HISTORY_START_DATE =
   process.env.DASHBOARD_HISTORY_START_DATE || "2026-05-24";
@@ -176,6 +177,11 @@ function normalizeHistoryRow(row) {
       ? null
       : roundNumber(flatProfitUnits * recommendedUnits, 4);
 
+  const clvCurrentPrice = toNumberOrNull(row.clv_current_price);
+  const clvImpliedProbabilityMove = toNumberOrNull(row.clv_implied_probability_move);
+  const clvAmericanPriceDelta = toNumberOrNull(row.clv_american_price_delta);
+  const clvStatus = row.clv_status || "not_captured";
+
   return {
     snapshotId: row.snapshot_id,
     requestedDate: formatDateValue(row.requested_date),
@@ -192,6 +198,18 @@ function normalizeHistoryRow(row) {
     side: row.side,
     line: toNumberOrNull(row.line),
     price: toNumberOrNull(row.price),
+    clv: {
+      captureType: row.clv_capture_type || "closing_proxy",
+      capturedAt: row.clv_captured_at || null,
+      currentSportsbook: row.clv_current_sportsbook || null,
+      currentPrice: clvCurrentPrice,
+      currentPriceDisplay:
+        clvCurrentPrice === null ? null : clvCurrentPrice > 0 ? `+${clvCurrentPrice}` : `${clvCurrentPrice}`,
+      currentLine: toNumberOrNull(row.clv_current_line),
+      impliedProbabilityMove: clvImpliedProbabilityMove,
+      americanPriceDelta: clvAmericanPriceDelta,
+      status: clvStatus
+    },
     modelProbability: toNumberOrNull(row.model_probability),
     calibratedProbability: toNumberOrNull(row.calibrated_probability),
     impliedProbability: toNumberOrNull(row.implied_probability),
@@ -304,6 +322,8 @@ async function getOfficialPickHistory(options = {}) {
   const limit = normalizeLimit(options.limit);
   const offset = normalizeOffset(options.offset);
 
+  await ensureClvLineSnapshotsTable();
+
   const result = await query(
     `
       SELECT
@@ -340,6 +360,14 @@ async function getOfficialPickHistory(options = {}) {
         ps.summary_reason,
         ps.pick_display,
         ps.raw_pick_json,
+        clv.capture_type AS clv_capture_type,
+        clv.captured_at AS clv_captured_at,
+        clv.current_sportsbook AS clv_current_sportsbook,
+        clv.current_price AS clv_current_price,
+        clv.current_line AS clv_current_line,
+        clv.implied_probability_move AS clv_implied_probability_move,
+        clv.american_price_delta AS clv_american_price_delta,
+        clv.clv_status AS clv_status,
         g.graded_at,
         g.game_pk,
         g.away_team,
@@ -352,6 +380,9 @@ async function getOfficialPickHistory(options = {}) {
       FROM pick_snapshots ps
       LEFT JOIN graded_pick_results g
         ON g.snapshot_id = ps.id
+      LEFT JOIN clv_line_snapshots clv
+        ON clv.snapshot_id = ps.id
+        AND clv.capture_type = 'closing_proxy'
       WHERE ps.snapshot_mode = 'official'
         AND ps.source_bucket = ANY($7::text[])
         AND ps.requested_date >= $1::date
@@ -394,4 +425,6 @@ module.exports = {
   getOfficialDashboardSummary,
   getOfficialPickHistory
 };
+
+
 
