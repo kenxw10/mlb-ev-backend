@@ -111,6 +111,139 @@ function getDoubleheaderFields(slateGame, rawPick = {}) {
   };
 }
 
+function normalizeStarterWarningName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function buildStarterWarning(side, lockedStarter, currentPitcher) {
+  const sideLabel = side === "away" ? "Away" : "Home";
+  const currentStarter = currentPitcher?.fullName || null;
+  const currentStatus = currentPitcher?.status || (currentStarter ? "announced" : "TBD");
+
+  const lockedName = lockedStarter || null;
+  const lockedComparable = normalizeStarterWarningName(lockedName);
+  const currentComparable = normalizeStarterWarningName(currentStarter);
+
+  const base = {
+    side,
+    lockedStarter: lockedName,
+    currentStarter,
+    currentStatus
+  };
+
+  if (!lockedComparable && !currentComparable) {
+    return {
+      check: {
+        ...base,
+        status: "both_tbd"
+      },
+      warning: null
+    };
+  }
+
+  if (!lockedComparable && currentComparable) {
+    return {
+      check: {
+        ...base,
+        status: "starter_announced_after_lock"
+      },
+      warning: {
+        code: `${side}_starter_announced_after_lock`,
+        severity: "info",
+        category: "starting_pitcher",
+        side,
+        message: `${sideLabel} starter was TBD or missing at official lock; current listed starter is ${currentStarter}.`,
+        lockedStarter: lockedName,
+        currentStarter,
+        informationalOnly: true,
+        affectsOfficialPick: false
+      }
+    };
+  }
+
+  if (lockedComparable && !currentComparable) {
+    return {
+      check: {
+        ...base,
+        status: "current_starter_tbd"
+      },
+      warning: {
+        code: `${side}_starter_now_tbd`,
+        severity: "info",
+        category: "starting_pitcher",
+        side,
+        message: `${sideLabel} starter was ${lockedName} at official lock; current listed starter is TBD.`,
+        lockedStarter: lockedName,
+        currentStarter,
+        informationalOnly: true,
+        affectsOfficialPick: false
+      }
+    };
+  }
+
+  if (lockedComparable !== currentComparable) {
+    return {
+      check: {
+        ...base,
+        status: "changed"
+      },
+      warning: {
+        code: `${side}_starter_changed`,
+        severity: "warning",
+        category: "starting_pitcher",
+        side,
+        message: `${sideLabel} starter changed from ${lockedName} at official lock to ${currentStarter}.`,
+        lockedStarter: lockedName,
+        currentStarter,
+        informationalOnly: true,
+        affectsOfficialPick: false
+      }
+    };
+  }
+
+  return {
+    check: {
+      ...base,
+      status: "matched"
+    },
+    warning: null
+  };
+}
+
+function buildLateWarnings(rawPick, slateGame) {
+  const awayResult = buildStarterWarning(
+    "away",
+    rawPick?.reasoning?.awayStarter || null,
+    slateGame?.probablePitchers?.away || null
+  );
+
+  const homeResult = buildStarterWarning(
+    "home",
+    rawPick?.reasoning?.homeStarter || null,
+    slateGame?.probablePitchers?.home || null
+  );
+
+  const warnings = [awayResult.warning, homeResult.warning].filter(Boolean);
+
+  return {
+    checkedAt: new Date().toISOString(),
+    source: "mlb_stats_probable_pitchers",
+    informationalOnly: true,
+    affectsOfficialPick: false,
+    hasWarnings: warnings.length > 0,
+    warningCount: warnings.length,
+    warnings,
+    starterCheck: {
+      away: awayResult.check,
+      home: homeResult.check
+    }
+  };
+}
 function normalizeOfficialPickRow(row, slateGame) {
   const rawPick = parseRawJson(row.raw_pick_json);
   const rawGrade = parseRawJson(row.raw_grade_json);
@@ -127,6 +260,8 @@ function normalizeOfficialPickRow(row, slateGame) {
   const clvImpliedProbabilityMove = toNumberOrNull(row.clv_implied_probability_move);
   const clvAmericanPriceDelta = toNumberOrNull(row.clv_american_price_delta);
   const clvStatus = row.clv_status || "not_captured";
+
+  const lateWarnings = buildLateWarnings(rawPick, slateGame);
 
   return {
     snapshotId: row.snapshot_id,
@@ -156,6 +291,7 @@ function normalizeOfficialPickRow(row, slateGame) {
     homeTeam: slateGame?.homeTeam || null,
     probablePitchers: slateGame?.probablePitchers || null,
     frontendLabels: slateGame?.frontendLabels || null,
+    lateWarnings,
 
     marketType: row.market_type,
     selection: row.selection,
@@ -455,6 +591,8 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
+
 
 
 
