@@ -652,19 +652,40 @@ async function captureClvForDate(date, options = {}) {
   await ensureClvLineSnapshotsTable();
 
   const captureType = options.captureType || DEFAULT_CAPTURE_TYPE;
+  const now = options.now ? new Date(options.now) : new Date();
+
   const [snapshots, oddsEvents] = await Promise.all([
     getOfficialSnapshotsForClv(date),
     fetchMlbOdds()
   ]);
 
   const oddsMap = buildOddsMap(oddsEvents, date);
+
   let savedCount = 0;
   let noCurrentLineCount = 0;
+  let skippedStartedCount = 0;
+  let missingStartTimeCount = 0;
+  let eligiblePregameCount = 0;
 
   for (const snapshotRow of snapshots) {
     const matchupKey = buildSnapshotMatchupKey(snapshotRow);
     const odds = matchupKey ? oddsMap[matchupKey] : null;
-    const saved = await upsertClvSnapshot(snapshotRow, odds, captureType);
+    const captureContext = getPregameCaptureContext(snapshotRow, odds, now);
+
+    if (!captureContext.gameStartTimeUtc) {
+      missingStartTimeCount += 1;
+    }
+
+    if (!captureContext.captureAllowed) {
+      skippedStartedCount += 1;
+      continue;
+    }
+
+    eligiblePregameCount += 1;
+
+    const saved = await upsertClvSnapshot(snapshotRow, odds, captureType, {
+      captureContext
+    });
 
     if (saved) {
       savedCount += 1;
@@ -679,8 +700,14 @@ async function captureClvForDate(date, options = {}) {
 
   return {
     ...tracking,
+    clvCaptureMode: "pregame_sweep_v1",
+    captureAttemptCount: snapshots.length,
+    eligiblePregameCount,
     savedCount,
-    noCurrentLineCount
+    noCurrentLineCount,
+    skippedStartedCount,
+    missingStartTimeCount,
+    ranAt: now.toISOString()
   };
 }
 
@@ -690,6 +717,7 @@ module.exports = {
   getClvTrackingForDate,
   captureClvForDate
 };
+
 
 
 
