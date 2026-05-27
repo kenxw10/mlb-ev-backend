@@ -14,6 +14,16 @@ function toNumberOrNull(value) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function formatAmericanOdds(value) {
+  const odds = toNumberOrNull(value);
+
+  if (odds === null) {
+    return null;
+  }
+
+  return odds > 0 ? `+${odds}` : `${odds}`;
+}
+
 function formatDateValue(value) {
   if (!value) {
     return null;
@@ -445,6 +455,7 @@ module.exports = {
   getDashboardOfficialPicks,
   getDashboardLivePicks
 };
+
 
 
 
