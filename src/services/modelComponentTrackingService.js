@@ -12,17 +12,17 @@ const COMPONENT_STATUS_CATALOG = [
     mode: "shadow_only",
     activeImpact: false,
     evaluationThreshold: 50,
-    metricPathPatterns: ["%recentform%", "%starterrecent%"],
+    metricPathPatterns: ["%componentinputs.fromreasoning.starter%recentform%", "%starterrecent%"],
     notes: "Pitcher last-3 and last-5 start form is ingested and scored, but active pick impact is currently zero."
   },
   {
     componentKey: "team_recent_form",
     label: "Team recent form",
-    mode: "not_started",
+    mode: "shadow_only",
     activeImpact: false,
     evaluationThreshold: 50,
     metricPathPatterns: ["%teamrecentform%"],
-    notes: "Planned shadow-tracked team hitting/offense recent-form interval."
+    notes: "Team last-7 and last-14 hitting/offense form is ingested and tracked in shadow mode with zero active pick impact."
   },
   {
     componentKey: "bullpen_recent_form",

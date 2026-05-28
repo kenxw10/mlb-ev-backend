@@ -56,6 +56,25 @@ async function fetchPitcherGameLogStats(personId, season) {
   return response.data;
 }
 
+async function fetchTeamGameLogStats(teamId, group, season) {
+  if (!teamId) {
+    return null;
+  }
+
+  const url = `${MLB_STATS_API_BASE_URL}/teams/${teamId}/stats`;
+
+  const response = await axios.get(url, {
+    params: {
+      stats: "gameLog",
+      group,
+      season,
+      sportId: 1
+    },
+    timeout: 15000
+  });
+
+  return response.data;
+}
 async function fetchTeamSeasonStats(group, season) {
   const url = `${MLB_STATS_API_BASE_URL}/teams/stats`;
 
@@ -76,7 +95,8 @@ module.exports = {
   fetchScheduleForDate,
   fetchPitcherSeasonStats,
   fetchPitcherGameLogStats,
-  fetchTeamSeasonStats
+  fetchTeamSeasonStats,
+  fetchTeamGameLogStats
 };
 
 

@@ -2,7 +2,8 @@ const {
   fetchScheduleForDate,
   fetchPitcherSeasonStats,
   fetchPitcherGameLogStats,
-  fetchTeamSeasonStats
+  fetchTeamSeasonStats,
+  fetchTeamGameLogStats
 } = require("../providers/mlbStatsProvider");
 const {
   getEasternDateFromIso,
@@ -189,6 +190,160 @@ function mapPitcherRecentForm(statsResponse, cutoffDate = null) {
     last5: aggregatePitcherGameLogSplits(splits, 5)
   };
 }
+
+function getTeamGameLogSplits(statsResponse, cutoffDate = null) {
+  const splits = statsResponse?.stats?.[0]?.splits || [];
+
+  return splits
+    .map((split) => {
+      const gameDate =
+        split?.date ||
+        split?.game?.gameDate ||
+        split?.game?.officialDate ||
+        null;
+
+      return {
+        ...split,
+        normalizedDate: gameDate ? String(gameDate).slice(0, 10) : null
+      };
+    })
+    .filter((split) => {
+      if (!split.normalizedDate) {
+        return false;
+      }
+
+      if (cutoffDate && split.normalizedDate >= cutoffDate) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => String(b.normalizedDate).localeCompare(String(a.normalizedDate)));
+}
+
+function divideOrNull(numerator, denominator, decimals = 3) {
+  const n = toNumberOrNull(numerator);
+  const d = toNumberOrNull(denominator);
+
+  if (n === null || d === null || d === 0) {
+    return null;
+  }
+
+  return Number((n / d).toFixed(decimals));
+}
+
+function aggregateTeamHittingGameLogSplits(splits, limit) {
+  const sample = splits.slice(0, limit);
+
+  if (sample.length === 0) {
+    return {
+      gameCount: 0,
+      lastDate: null,
+      runs: null,
+      runsPerGame: null,
+      hits: null,
+      hitsPerGame: null,
+      homeRuns: null,
+      homeRunsPerGame: null,
+      walks: null,
+      walksPerGame: null,
+      strikeouts: null,
+      strikeoutsPerGame: null,
+      atBats: null,
+      plateAppearances: null,
+      battingAverage: null,
+      onBasePercentage: null,
+      sluggingPercentage: null,
+      ops: null
+    };
+  }
+
+  let runs = 0;
+  let hits = 0;
+  let doubles = 0;
+  let triples = 0;
+  let homeRuns = 0;
+  let walks = 0;
+  let strikeouts = 0;
+  let atBats = 0;
+  let plateAppearances = 0;
+  let hitByPitch = 0;
+  let sacrificeFlies = 0;
+  let totalBases = 0;
+
+  for (const split of sample) {
+    const stat = split.stat || {};
+
+    const statRuns = toNumberOrNull(stat.runs) || 0;
+    const statHits = toNumberOrNull(stat.hits) || 0;
+    const statDoubles = toNumberOrNull(stat.doubles) || 0;
+    const statTriples = toNumberOrNull(stat.triples) || 0;
+    const statHomeRuns = toNumberOrNull(stat.homeRuns) || 0;
+    const statWalks = toNumberOrNull(stat.baseOnBalls ?? stat.walks) || 0;
+    const statStrikeouts = toNumberOrNull(stat.strikeOuts ?? stat.strikeouts) || 0;
+    const statAtBats = toNumberOrNull(stat.atBats) || 0;
+    const statPlateAppearances = toNumberOrNull(stat.plateAppearances) || 0;
+    const statHitByPitch = toNumberOrNull(stat.hitByPitch) || 0;
+    const statSacrificeFlies = toNumberOrNull(stat.sacFlies ?? stat.sacrificeFlies) || 0;
+
+    const statTotalBases =
+      toNumberOrNull(stat.totalBases) ??
+      Math.max(statHits - statDoubles - statTriples - statHomeRuns, 0) +
+        statDoubles * 2 +
+        statTriples * 3 +
+        statHomeRuns * 4;
+
+    runs += statRuns;
+    hits += statHits;
+    doubles += statDoubles;
+    triples += statTriples;
+    homeRuns += statHomeRuns;
+    walks += statWalks;
+    strikeouts += statStrikeouts;
+    atBats += statAtBats;
+    plateAppearances += statPlateAppearances;
+    hitByPitch += statHitByPitch;
+    sacrificeFlies += statSacrificeFlies;
+    totalBases += statTotalBases;
+  }
+
+  const obpDenominator = atBats + walks + hitByPitch + sacrificeFlies;
+  const obp = divideOrNull(hits + walks + hitByPitch, obpDenominator, 3);
+  const slg = divideOrNull(totalBases, atBats, 3);
+
+  return {
+    gameCount: sample.length,
+    lastDate: sample[0]?.normalizedDate || null,
+    runs,
+    runsPerGame: divideOrNull(runs, sample.length, 3),
+    hits,
+    hitsPerGame: divideOrNull(hits, sample.length, 3),
+    homeRuns,
+    homeRunsPerGame: divideOrNull(homeRuns, sample.length, 3),
+    walks,
+    walksPerGame: divideOrNull(walks, sample.length, 3),
+    strikeouts,
+    strikeoutsPerGame: divideOrNull(strikeouts, sample.length, 3),
+    atBats,
+    plateAppearances,
+    battingAverage: divideOrNull(hits, atBats, 3),
+    onBasePercentage: obp,
+    sluggingPercentage: slg,
+    ops: obp !== null && slg !== null ? Number((obp + slg).toFixed(3)) : null
+  };
+}
+
+function mapTeamRecentHittingForm(statsResponse, cutoffDate = null) {
+  const splits = getTeamGameLogSplits(statsResponse, cutoffDate);
+
+  return {
+    source: "mlb_stats_team_gameLog",
+    cutoffDate: cutoffDate || null,
+    basis: "team_hitting_games_before_game_date",
+    last7: aggregateTeamHittingGameLogSplits(splits, 7),
+    last14: aggregateTeamHittingGameLogSplits(splits, 14)
+  };
+}
 function mapPitcherStats(statsResponse) {
   const split = statsResponse?.stats?.[0]?.splits?.[0];
 
@@ -317,6 +472,26 @@ function getTeamSeasonStats(teamId, hittingStatsMap, pitchingStatsMap) {
   };
 }
 
+
+async function getTeamRecentForm(teamId, season, cutoffDate = null) {
+  if (!teamId || typeof fetchTeamGameLogStats !== "function") {
+    return {
+      hitting: null
+    };
+  }
+
+  try {
+    const hittingResponse = await fetchTeamGameLogStats(teamId, "hitting", season);
+
+    return {
+      hitting: mapTeamRecentHittingForm(hittingResponse, cutoffDate)
+    };
+  } catch (error) {
+    return {
+      hitting: null
+    };
+  }
+}
 function mapTeamIdentity(teamWrapper) {
   const team = teamWrapper?.team || {};
 
@@ -409,6 +584,11 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
   );
 
   const doubleheaderMetadata = getRawDoubleheaderMetadata(game);
+  const teamRecentFormCutoffDate = game?.gameDate ? getEasternDateFromIso(game.gameDate) : null;
+  const [awayTeamRecentForm, homeTeamRecentForm] = await Promise.all([
+    getTeamRecentForm(awayIdentity.id, season, teamRecentFormCutoffDate),
+    getTeamRecentForm(homeIdentity.id, season, teamRecentFormCutoffDate)
+  ]);
 
   return {
     gamePk: game.gamePk,
@@ -429,7 +609,8 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
         awayIdentity.id,
         hittingStatsMap,
         pitchingStatsMap
-      )
+      ),
+      teamRecentForm: awayTeamRecentForm
     },
     homeTeam: {
       ...homeIdentity,
@@ -438,7 +619,8 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
         homeIdentity.id,
         hittingStatsMap,
         pitchingStatsMap
-      )
+      ),
+      teamRecentForm: homeTeamRecentForm
     }
   };
 }

@@ -424,8 +424,15 @@ function buildMatchupReasoning(
         away: awayTeam?.teamSeasonStats || null,
         home: homeTeam?.teamSeasonStats || null
       },
+      teamRecentForm: {
+        away: awayTeam?.teamRecentForm || null,
+        home: homeTeam?.teamRecentForm || null
+      },
       futureComponents: {
-        teamRecentForm: null,
+        teamRecentForm: {
+          away: awayTeam?.teamRecentForm || null,
+          home: homeTeam?.teamRecentForm || null
+        },
         bullpenRecentForm: null,
         handednessSplits: null,
         weather: null,
