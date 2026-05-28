@@ -1,5 +1,7 @@
 const { roundNumber } = require("../utils/oddsUtils");
 
+const STARTER_RECENT_FORM_VERSION = "starter-recent-form-v1";
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -167,7 +169,7 @@ function scoreTeamPitching(pitchingStats) {
   return score;
 }
 
-function scoreStartingPitcher(starterStats) {
+function scoreStartingPitcherBase(starterStats) {
   if (!starterStats) {
     return 0;
   }
@@ -198,6 +200,71 @@ function scoreStartingPitcher(starterStats) {
   return score;
 }
 
+function getRecentStarterSampleWeight(recentForm) {
+  const last5 = recentForm?.last5;
+
+  if (!last5) {
+    return 0;
+  }
+
+  const inningsPitched = safeNumber(last5.inningsPitched);
+  const gamesStarted =
+    safeNumber(last5.gamesStarted) ?? safeNumber(last5.appearanceCount);
+
+  if (
+    inningsPitched === null ||
+    inningsPitched <= 0 ||
+    gamesStarted === null ||
+    gamesStarted <= 0
+  ) {
+    return 0;
+  }
+
+  const inningsWeight = clamp(inningsPitched / 25, 0, 1);
+  const startsWeight = clamp(gamesStarted / 5, 0, 1);
+
+  return roundNumber(inningsWeight * startsWeight, 3);
+}
+
+function buildStartingPitcherScore(starterStats, recentForm) {
+  const seasonScore = scoreStartingPitcherBase(starterStats);
+  const last3Score = recentForm?.last3
+    ? scoreStartingPitcherBase(recentForm.last3)
+    : null;
+  const last5Score = recentForm?.last5
+    ? scoreStartingPitcherBase(recentForm.last5)
+    : null;
+
+  let recentCompositeScore = null;
+
+  if (last3Score !== null && last5Score !== null) {
+    recentCompositeScore = last5Score * 0.7 + last3Score * 0.3;
+  } else if (last5Score !== null) {
+    recentCompositeScore = last5Score;
+  } else if (last3Score !== null) {
+    recentCompositeScore = last3Score;
+  }
+
+  const recentSampleWeight = getRecentStarterSampleWeight(recentForm);
+  const rawRecentAdjustment =
+    recentCompositeScore === null
+      ? 0
+      : (recentCompositeScore - seasonScore) * 0.3 * recentSampleWeight;
+  const recentAdjustment = clamp(rawRecentAdjustment, -0.25, 0.25);
+  const finalScore = seasonScore + recentAdjustment;
+
+  return {
+    finalScore: roundNumber(finalScore, 3),
+    seasonScore: roundNumber(seasonScore, 3),
+    last3Score: last3Score === null ? null : roundNumber(last3Score, 3),
+    last5Score: last5Score === null ? null : roundNumber(last5Score, 3),
+    recentCompositeScore:
+      recentCompositeScore === null ? null : roundNumber(recentCompositeScore, 3),
+    recentSampleWeight,
+    recentAdjustment: roundNumber(recentAdjustment, 3),
+    recentFormVersion: STARTER_RECENT_FORM_VERSION
+  };
+}
 function getStarterReliability(starterStats) {
   if (!starterStats) {
     return 0;
@@ -270,16 +337,26 @@ function buildDataQuality(game) {
 function scoreTeam(team) {
   const offenseScore = scoreOffense(team?.teamSeasonStats?.hitting);
   const bullpenAndStaffScore = scoreTeamPitching(team?.teamSeasonStats?.pitching);
-  const starterScore = scoreStartingPitcher(team?.probablePitcher?.seasonStats);
+  const starterScoreCard = buildStartingPitcherScore(
+    team?.probablePitcher?.seasonStats,
+    team?.probablePitcher?.recentForm
+  );
+  const starterScore = starterScoreCard.finalScore;
 
   return {
     offenseScore,
     bullpenAndStaffScore,
     starterScore,
+    starterSeasonScore: starterScoreCard.seasonScore,
+    starterLast3Score: starterScoreCard.last3Score,
+    starterLast5Score: starterScoreCard.last5Score,
+    starterRecentCompositeScore: starterScoreCard.recentCompositeScore,
+    starterRecentSampleWeight: starterScoreCard.recentSampleWeight,
+    starterRecentAdjustment: starterScoreCard.recentAdjustment,
+    starterRecentFormVersion: starterScoreCard.recentFormVersion,
     totalScore: offenseScore + bullpenAndStaffScore + starterScore
   };
 }
-
 function buildMatchupReasoning(
   awayTeam,
   homeTeam,
@@ -291,28 +368,61 @@ function buildMatchupReasoning(
   const teamPitchingEdge =
     awayScoreCard.bullpenAndStaffScore - homeScoreCard.bullpenAndStaffScore;
   const starterEdge = awayScoreCard.starterScore - homeScoreCard.starterScore;
+  const starterRecentAdjustmentEdge =
+    (awayScoreCard.starterRecentAdjustment ?? 0) -
+    (homeScoreCard.starterRecentAdjustment ?? 0);
 
   return {
     offenseEdge: roundNumber(offenseEdge, 3),
     teamPitchingEdge: roundNumber(teamPitchingEdge, 3),
     starterEdge: roundNumber(starterEdge, 3),
+    starterRecentAdjustmentEdge: roundNumber(starterRecentAdjustmentEdge, 3),
+    starterRecentFormVersion:
+      awayScoreCard.starterRecentFormVersion ||
+      homeScoreCard.starterRecentFormVersion ||
+      null,
+
     awayStarter: awayTeam?.probablePitcher?.fullName || null,
     homeStarter: homeTeam?.probablePitcher?.fullName || null,
+
+    awayStarterSeasonScore: awayScoreCard.starterSeasonScore ?? null,
+    homeStarterSeasonScore: homeScoreCard.starterSeasonScore ?? null,
+    awayStarterRecentScore: awayScoreCard.starterRecentCompositeScore ?? null,
+    homeStarterRecentScore: homeScoreCard.starterRecentCompositeScore ?? null,
+    awayStarterRecentAdjustment: awayScoreCard.starterRecentAdjustment ?? null,
+    homeStarterRecentAdjustment: homeScoreCard.starterRecentAdjustment ?? null,
+    awayStarterRecentSampleWeight: awayScoreCard.starterRecentSampleWeight ?? null,
+    homeStarterRecentSampleWeight: homeScoreCard.starterRecentSampleWeight ?? null,
+
     dataQuality
   };
 }
-
 function flipReasoning(reasoning) {
   return {
     offenseEdge: roundNumber(-(reasoning?.offenseEdge ?? 0), 3),
     teamPitchingEdge: roundNumber(-(reasoning?.teamPitchingEdge ?? 0), 3),
     starterEdge: roundNumber(-(reasoning?.starterEdge ?? 0), 3),
+    starterRecentAdjustmentEdge: roundNumber(
+      -(reasoning?.starterRecentAdjustmentEdge ?? 0),
+      3
+    ),
+    starterRecentFormVersion: reasoning?.starterRecentFormVersion || null,
+
     awayStarter: reasoning?.awayStarter || null,
     homeStarter: reasoning?.homeStarter || null,
+
+    awayStarterSeasonScore: reasoning?.awayStarterSeasonScore ?? null,
+    homeStarterSeasonScore: reasoning?.homeStarterSeasonScore ?? null,
+    awayStarterRecentScore: reasoning?.awayStarterRecentScore ?? null,
+    homeStarterRecentScore: reasoning?.homeStarterRecentScore ?? null,
+    awayStarterRecentAdjustment: reasoning?.awayStarterRecentAdjustment ?? null,
+    homeStarterRecentAdjustment: reasoning?.homeStarterRecentAdjustment ?? null,
+    awayStarterRecentSampleWeight: reasoning?.awayStarterRecentSampleWeight ?? null,
+    homeStarterRecentSampleWeight: reasoning?.homeStarterRecentSampleWeight ?? null,
+
     dataQuality: reasoning?.dataQuality || null
   };
 }
-
 function getConfidenceTier(candidate, dataQuality, thresholds = {}) {
   const edge = candidate?.edge ?? 0;
   const ev = candidate?.expectedValue ?? 0;
@@ -393,3 +503,5 @@ module.exports = {
   getConfidenceTier,
   getGameActionability
 };
+
+
