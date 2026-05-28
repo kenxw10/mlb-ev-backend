@@ -394,6 +394,49 @@ function buildMatchupReasoning(
     awayStarterRecentSampleWeight: awayScoreCard.starterRecentSampleWeight ?? null,
     homeStarterRecentSampleWeight: homeScoreCard.starterRecentSampleWeight ?? null,
 
+    componentSchemaVersion: "model-components-v1",
+    modelWeightVersion: "hard-coded-model-weights-v1",
+
+    componentInputs: {
+      starter: {
+        away: {
+          id: awayTeam?.probablePitcher?.id || null,
+          fullName: awayTeam?.probablePitcher?.fullName || null,
+          seasonStats: awayTeam?.probablePitcher?.seasonStats || null,
+          recentForm: awayTeam?.probablePitcher?.recentForm || null
+        },
+        home: {
+          id: homeTeam?.probablePitcher?.id || null,
+          fullName: homeTeam?.probablePitcher?.fullName || null,
+          seasonStats: homeTeam?.probablePitcher?.seasonStats || null,
+          recentForm: homeTeam?.probablePitcher?.recentForm || null
+        }
+      },
+      teamSeason: {
+        away: awayTeam?.teamSeasonStats || null,
+        home: homeTeam?.teamSeasonStats || null
+      },
+      futureComponents: {
+        teamRecentForm: null,
+        bullpenRecentForm: null,
+        handednessSplits: null,
+        weather: null,
+        lineup: null,
+        injuries: null
+      }
+    },
+
+    componentScores: {
+      away: awayScoreCard,
+      home: homeScoreCard,
+      edges: {
+        offenseEdge: roundNumber(offenseEdge, 3),
+        teamPitchingEdge: roundNumber(teamPitchingEdge, 3),
+        starterEdge: roundNumber(starterEdge, 3),
+        starterRecentAdjustmentEdge: roundNumber(starterRecentAdjustmentEdge, 3)
+      }
+    },
+
     dataQuality
   };
 }
@@ -419,6 +462,11 @@ function flipReasoning(reasoning) {
     homeStarterRecentAdjustment: reasoning?.homeStarterRecentAdjustment ?? null,
     awayStarterRecentSampleWeight: reasoning?.awayStarterRecentSampleWeight ?? null,
     homeStarterRecentSampleWeight: reasoning?.homeStarterRecentSampleWeight ?? null,
+
+    componentSchemaVersion: reasoning?.componentSchemaVersion || null,
+    modelWeightVersion: reasoning?.modelWeightVersion || null,
+    componentInputs: reasoning?.componentInputs || null,
+    componentScores: reasoning?.componentScores || null,
 
     dataQuality: reasoning?.dataQuality || null
   };
@@ -503,5 +551,7 @@ module.exports = {
   getConfidenceTier,
   getGameActionability
 };
+
+
 
 

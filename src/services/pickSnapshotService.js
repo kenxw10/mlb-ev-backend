@@ -1,5 +1,9 @@
 const crypto = require("crypto");
 const { query, isDatabaseEnabled } = require("../config/db");
+const {
+  ensureModelComponentTrackingTables,
+  persistModelComponentSnapshot
+} = require("./modelComponentTrackingService");
 
 async function ensurePickSnapshotTable() {
   if (!isDatabaseEnabled()) {
@@ -124,6 +128,7 @@ async function persistServedPickSnapshot(response, options = {}) {
 
   for (const row of rows) {
     const pick = row.pick || {};
+    const snapshotId = crypto.randomUUID();
 
     await query(
       `
@@ -173,7 +178,7 @@ async function persistServedPickSnapshot(response, options = {}) {
         )
       `,
       [
-        crypto.randomUUID(),
+        snapshotId,
         batchId,
         response?.date || null,
         response?.generatedAt || null,
@@ -211,6 +216,19 @@ async function persistServedPickSnapshot(response, options = {}) {
         JSON.stringify(pick)
       ]
     );
+
+    if (snapshotMode === "official") {
+      await persistModelComponentSnapshot({
+        pickSnapshotId: snapshotId,
+        batchId,
+        response,
+        row,
+        pick,
+        snapshotMode,
+        officialLockWindow,
+        officialRunId
+      });
+    }
   }
 
   return {
@@ -224,3 +242,7 @@ module.exports = {
   ensurePickSnapshotTable,
   persistServedPickSnapshot
 };
+
+
+
+
