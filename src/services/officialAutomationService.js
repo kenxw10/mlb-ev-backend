@@ -255,6 +255,107 @@ async function runOfficialLockForDateWindow(requestedDate, lockWindow) {
   }
 }
 
+async function forceRunOfficialLockForDateWindow(requestedDate, lockWindow, options = {}) {
+  if (!isDatabaseEnabled()) {
+    return {
+      ok: false,
+      error: "DATABASE_URL not configured."
+    };
+  }
+
+  if (!LOCK_WINDOWS[lockWindow]) {
+    return {
+      ok: false,
+      error: "Invalid lock window."
+    };
+  }
+
+  await ensureOfficialAutomationTables();
+
+  const snapshotResult = await query(
+    `
+      SELECT
+        COUNT(*)::int AS snapshot_count,
+        COUNT(g.snapshot_id)::int AS graded_count
+      FROM pick_snapshots ps
+      LEFT JOIN graded_pick_results g
+        ON g.snapshot_id = ps.id
+      WHERE ps.requested_date = $1::date
+        AND ps.snapshot_mode = 'official'
+        AND ps.official_lock_window = $2
+    `,
+    [requestedDate, lockWindow]
+  );
+
+  const snapshotInfo = snapshotResult.rows?.[0] || {
+    snapshot_count: 0,
+    graded_count: 0
+  };
+
+  if (Number(snapshotInfo.graded_count || 0) > 0) {
+    return {
+      ok: false,
+      requestedDate,
+      lockWindow,
+      skipped: true,
+      reason: "Refusing forced official lock because graded official snapshots already exist.",
+      snapshotInfo
+    };
+  }
+
+  let deletedSnapshots = [];
+
+  if (Number(snapshotInfo.snapshot_count || 0) > 0) {
+    const allowSnapshotDelete = options.allowSnapshotDelete === true;
+
+    if (!allowSnapshotDelete) {
+      return {
+        ok: false,
+        requestedDate,
+        lockWindow,
+        skipped: true,
+        reason: "Official snapshots already exist. Pass allowSnapshotDelete=true to replace ungraded snapshots.",
+        snapshotInfo
+      };
+    }
+
+    const deletedSnapshotResult = await query(
+      `
+        DELETE FROM pick_snapshots
+        WHERE requested_date = $1::date
+          AND snapshot_mode = 'official'
+          AND official_lock_window = $2
+        RETURNING id, matchup, market_type, selection
+      `,
+      [requestedDate, lockWindow]
+    );
+
+    deletedSnapshots = deletedSnapshotResult.rows || [];
+  }
+
+  const deletedRunResult = await query(
+    `
+      DELETE FROM official_lock_runs
+      WHERE requested_date = $1::date
+        AND lock_window = $2
+      RETURNING id, requested_date, lock_window, status, note
+    `,
+    [requestedDate, lockWindow]
+  );
+
+  const rerunResult = await runOfficialLockForDateWindow(requestedDate, lockWindow);
+
+  return {
+    ...rerunResult,
+    forced: true,
+    forceReason: options.reason || null,
+    before: {
+      snapshotInfo,
+      deletedLockRuns: deletedRunResult.rows || [],
+      deletedSnapshots
+    }
+  };
+}
 async function runOfficialGradeForDate(requestedDate) {
   if (!isDatabaseEnabled()) {
     return {
@@ -377,12 +478,14 @@ module.exports = {
   getEasternDateString,
   getYesterdayEasternDateString,
   runOfficialLockForDateWindow,
+  forceRunOfficialLockForDateWindow,
   runOfficialGradeForDate,
   runDueOfficialLock,
   runDueOfficialGrade,
   runDueClvCapture,
   ensureOfficialAutomationTables
 };
+
 
 
 

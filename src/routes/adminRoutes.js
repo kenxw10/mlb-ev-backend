@@ -20,6 +20,7 @@ const {
   getEasternDateString,
   getYesterdayEasternDateString,
   runOfficialLockForDateWindow,
+  forceRunOfficialLockForDateWindow,
   runOfficialGradeForDate
 } = require("../services/officialAutomationService");
 
@@ -223,6 +224,60 @@ router.get("/official-lock", async (req, res) => {
   }
 });
 
+router.post("/official-lock/force", async (req, res) => {
+  try {
+    const requestedDate =
+      typeof req.query.date === "string" && req.query.date.trim()
+        ? req.query.date.trim()
+        : typeof req.body?.date === "string"
+          ? req.body.date.trim()
+          : getEasternDateString();
+
+    const lockWindow =
+      typeof req.query.window === "string" && req.query.window.trim()
+        ? req.query.window.trim()
+        : typeof req.body?.window === "string"
+          ? req.body.window.trim()
+          : "daily";
+
+    const allowSnapshotDelete =
+      String(req.query.allowSnapshotDelete || req.body?.allowSnapshotDelete || "")
+        .toLowerCase() === "true";
+
+    const reason =
+      typeof req.query.reason === "string" && req.query.reason.trim()
+        ? req.query.reason.trim()
+        : typeof req.body?.reason === "string"
+          ? req.body.reason.trim()
+          : "manual_force_official_lock";
+
+    if (!isValidDateString(requestedDate)) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid date query parameter is required in YYYY-MM-DD format."
+      });
+    }
+
+    if (!LOCK_WINDOWS[lockWindow]) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valid window query parameter is required: daily."
+      });
+    }
+
+    const result = await forceRunOfficialLockForDateWindow(requestedDate, lockWindow, {
+      allowSnapshotDelete,
+      reason
+    });
+
+    return res.status(result.ok === false ? 409 : 200).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to force official lock."
+    });
+  }
+});
 router.get("/official-grade", async (req, res) => {
   try {
     const requestedDate =
@@ -355,6 +410,7 @@ router.post("/clv/capture-due", async (req, res) => {
 });
 
 module.exports = router;
+
 
 
 
