@@ -5,6 +5,63 @@ const COMPONENT_SCHEMA_VERSION = "model-components-v1";
 const TRACKING_SCHEMA_VERSION = "model-component-tracking-v1";
 const MODEL_WEIGHT_VERSION = "hard-coded-model-weights-v1";
 
+const COMPONENT_STATUS_CATALOG = [
+  {
+    componentKey: "starter_recent_form",
+    label: "Starter recent form",
+    mode: "shadow_only",
+    activeImpact: false,
+    evaluationThreshold: 50,
+    metricPathPatterns: ["%recentform%", "%starterrecent%"],
+    notes: "Pitcher last-3 and last-5 start form is ingested and scored, but active pick impact is currently zero."
+  },
+  {
+    componentKey: "team_recent_form",
+    label: "Team recent form",
+    mode: "not_started",
+    activeImpact: false,
+    evaluationThreshold: 50,
+    metricPathPatterns: ["%teamrecentform%"],
+    notes: "Planned shadow-tracked team hitting/offense recent-form interval."
+  },
+  {
+    componentKey: "bullpen_recent_form",
+    label: "Bullpen recent form",
+    mode: "not_started",
+    activeImpact: false,
+    evaluationThreshold: 75,
+    metricPathPatterns: ["%bullpenrecentform%"],
+    notes: "Planned shadow-tracked bullpen/team pitching recent-form and usage interval."
+  },
+  {
+    componentKey: "handedness_splits",
+    label: "Handedness splits",
+    mode: "not_started",
+    activeImpact: false,
+    evaluationThreshold: 100,
+    metricPathPatterns: ["%handedness%"],
+    notes: "Planned split-based matchup context."
+  },
+  {
+    componentKey: "weather",
+    label: "Weather",
+    mode: "not_started",
+    activeImpact: false,
+    evaluationThreshold: 100,
+    metricPathPatterns: ["%weather%"],
+    notes: "Planned weather and run-environment context."
+  },
+  {
+    componentKey: "lineup_injuries",
+    label: "Lineup / injuries",
+    mode: "not_started",
+    activeImpact: false,
+    evaluationThreshold: 100,
+    metricPathPatterns: ["%lineup%", "%injur%"],
+    notes: "Planned lineup confirmation, scratches, and injury context."
+  }
+];
+
 function toNumberOrNull(value) {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -48,6 +105,7 @@ function buildModelComponentPayload({
       reasoning?.modelWeightVersion ||
       pick?.modelWeightVersion ||
       MODEL_WEIGHT_VERSION,
+  COMPONENT_STATUS_CATALOG,
 
     context: {
       pickSnapshotId,
@@ -439,12 +497,140 @@ async function persistModelComponentSnapshot({
   };
 }
 
+function buildComponentFrontendStatus(row) {
+  if (row.activeImpact) {
+    return {
+      status: "active",
+      label: "Active"
+    };
+  }
+
+  if ((row.trackedPickCount || 0) <= 0) {
+    return {
+      status: "not_started",
+      label: "Not started"
+    };
+  }
+
+  if ((row.gradedPickCount || 0) >= row.evaluationThreshold) {
+    return {
+      status: "ready_for_evaluation",
+      label: "Ready for evaluation"
+    };
+  }
+
+  return {
+    status: "shadow_tracking",
+    label: "Shadow tracking"
+  };
+}
+
+async function getModelComponentTrackingStatus() {
+  if (!isDatabaseEnabled()) {
+    return {
+      ok: false,
+      error: "DATABASE_URL not configured."
+    };
+  }
+
+  const tableCheck = await query(`
+    SELECT
+      to_regclass('public.model_component_snapshots') AS component_snapshots_table,
+      to_regclass('public.model_component_metrics') AS component_metrics_table
+  `);
+
+  const tables = tableCheck.rows?.[0] || {};
+  const hasTables =
+    Boolean(tables.component_snapshots_table) &&
+    Boolean(tables.component_metrics_table);
+
+  const rows = [];
+
+  for (const component of COMPONENT_STATUS_CATALOG) {
+    let trackedPickCount = 0;
+    let gradedPickCount = 0;
+    let lastTrackedAt = null;
+    let lastGradedAt = null;
+
+    if (hasTables) {
+      const result = await query(
+        `
+          SELECT
+            COUNT(DISTINCT mcs.pick_snapshot_id)::int AS tracked_pick_count,
+            COUNT(DISTINCT CASE WHEN g.outcome IS NOT NULL THEN mcs.pick_snapshot_id END)::int AS graded_pick_count,
+            MAX(mcs.captured_at) AS last_tracked_at,
+            MAX(g.graded_at) AS last_graded_at
+          FROM model_component_snapshots mcs
+          JOIN model_component_metrics m
+            ON m.component_snapshot_id = mcs.id
+          LEFT JOIN graded_pick_results g
+            ON g.snapshot_id = mcs.pick_snapshot_id
+          WHERE mcs.snapshot_mode = 'official'
+            AND lower(m.metric_path) LIKE ANY($1::text[])
+        `,
+        [component.metricPathPatterns]
+      );
+
+      trackedPickCount = Number(result.rows?.[0]?.tracked_pick_count || 0);
+      gradedPickCount = Number(result.rows?.[0]?.graded_pick_count || 0);
+      lastTrackedAt = result.rows?.[0]?.last_tracked_at || null;
+      lastGradedAt = result.rows?.[0]?.last_graded_at || null;
+    }
+
+    const picksRemainingForEvaluation = Math.max(
+      component.evaluationThreshold - gradedPickCount,
+      0
+    );
+    const frontendStatus = buildComponentFrontendStatus({
+      ...component,
+      trackedPickCount,
+      gradedPickCount
+    });
+
+    rows.push({
+      componentKey: component.componentKey,
+      label: component.label,
+      mode: component.mode,
+      activeImpact: component.activeImpact,
+      trackedPickCount,
+      gradedPickCount,
+      evaluationThreshold: component.evaluationThreshold,
+      picksRemainingForEvaluation,
+      frontendStatus: frontendStatus.status,
+      frontendStatusLabel: frontendStatus.label,
+      lastTrackedAt,
+      lastGradedAt,
+      notes: component.notes
+    });
+  }
+
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    trackingSchemaVersion: TRACKING_SCHEMA_VERSION,
+    modelWeightVersion: MODEL_WEIGHT_VERSION,
+    evaluationBasis:
+      "Official graded picks with component metrics captured at lock time.",
+    tables,
+    rows,
+    summary: {
+      trackedComponentCount: rows.filter((row) => row.trackedPickCount > 0).length,
+      readyForEvaluationCount: rows.filter(
+        (row) => row.frontendStatus === "ready_for_evaluation"
+      ).length,
+      activeComponentCount: rows.filter((row) => row.activeImpact).length
+    }
+  };
+}
 module.exports = {
   COMPONENT_SCHEMA_VERSION,
   TRACKING_SCHEMA_VERSION,
   MODEL_WEIGHT_VERSION,
+  COMPONENT_STATUS_CATALOG,
   ensureModelComponentTrackingTables,
   buildModelComponentPayload,
   flattenMetrics,
-  persistModelComponentSnapshot
+  persistModelComponentSnapshot,
+  getModelComponentTrackingStatus
 };
+

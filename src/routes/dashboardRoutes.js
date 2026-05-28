@@ -219,6 +219,17 @@ router.get("/bet-policy-tracking", async (req, res) => {
   }
 });
 
+router.get("/model-component-status", async (req, res) => {
+  try {
+    const result = await getModelComponentTrackingStatus();
+    return res.status(result.ok ? 200 : 500).json(result);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message || "Failed to load model component tracking status."
+    });
+  }
+});
 router.get("/status", async (req, res) => {
   try {
     const date =
@@ -281,4 +292,5 @@ router.get("/execution-performance", async (req, res) => {
 });
 
 module.exports = router;
+
 
