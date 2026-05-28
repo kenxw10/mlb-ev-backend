@@ -1,6 +1,7 @@
 const {
   fetchScheduleForDate,
   fetchPitcherSeasonStats,
+  fetchPitcherGameLogStats,
   fetchTeamSeasonStats
 } = require("../providers/mlbStatsProvider");
 const {
@@ -8,6 +9,186 @@ const {
   getEasternTimeFromIso
 } = require("../utils/teamUtils");
 
+function toNumberOrNull(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function parseBaseballInnings(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const raw = String(value).trim();
+
+  if (!raw.includes(".")) {
+    return toNumberOrNull(raw);
+  }
+
+  const [wholePart, decimalPart] = raw.split(".");
+  const whole = toNumberOrNull(wholePart);
+
+  if (whole === null) {
+    return null;
+  }
+
+  if (decimalPart === "1") {
+    return whole + 1 / 3;
+  }
+
+  if (decimalPart === "2") {
+    return whole + 2 / 3;
+  }
+
+  if (decimalPart === "0" || decimalPart === "") {
+    return whole;
+  }
+
+  return toNumberOrNull(raw);
+}
+
+function roundStat(value, digits = 3) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return null;
+  }
+
+  return Number(Number(value).toFixed(digits));
+}
+
+function getPitcherLogDate(split) {
+  return (
+    split?.date ||
+    split?.game?.gameDate ||
+    split?.game?.officialDate ||
+    split?.game?.gamePk ||
+    null
+  );
+}
+
+function getPitcherLogDateOnly(split) {
+  const raw = getPitcherLogDate(split);
+
+  if (!raw) {
+    return null;
+  }
+
+  const rawText = String(raw);
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(rawText)) {
+    return rawText.slice(0, 10);
+  }
+
+  const parsed = new Date(rawText);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+function getPitcherGameLogSplits(statsResponse, cutoffDate = null) {
+  const splits = statsResponse?.stats?.[0]?.splits || [];
+  const cutoffDateOnly = cutoffDate ? String(cutoffDate).slice(0, 10) : null;
+
+  return splits
+    .filter((split) => {
+      const innings = parseBaseballInnings(split?.stat?.inningsPitched);
+      const gamesStarted = toNumberOrNull(split?.stat?.gamesStarted);
+      const logDateOnly = getPitcherLogDateOnly(split);
+
+      if (innings === null || innings <= 0) {
+        return false;
+      }
+
+      if (gamesStarted !== null && gamesStarted <= 0) {
+        return false;
+      }
+
+      if (cutoffDateOnly && logDateOnly && logDateOnly >= cutoffDateOnly) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      const dateA = new Date(getPitcherLogDate(a) || 0).getTime();
+      const dateB = new Date(getPitcherLogDate(b) || 0).getTime();
+      return dateB - dateA;
+    });
+}
+function aggregatePitcherGameLogSplits(splits, limit) {
+  const selected = splits.slice(0, limit);
+
+  if (selected.length === 0) {
+    return null;
+  }
+
+  let inningsPitched = 0;
+  let strikeOuts = 0;
+  let baseOnBalls = 0;
+  let hits = 0;
+  let homeRuns = 0;
+  let earnedRuns = 0;
+  let runs = 0;
+  let gamesStarted = 0;
+
+  for (const split of selected) {
+    const stat = split?.stat || {};
+
+    inningsPitched += parseBaseballInnings(stat.inningsPitched) || 0;
+    strikeOuts += toNumberOrNull(stat.strikeOuts) || 0;
+    baseOnBalls += toNumberOrNull(stat.baseOnBalls) || 0;
+    hits += toNumberOrNull(stat.hits) || 0;
+    homeRuns += toNumberOrNull(stat.homeRuns) || 0;
+    earnedRuns += toNumberOrNull(stat.earnedRuns) || 0;
+    runs += toNumberOrNull(stat.runs) || 0;
+    gamesStarted += toNumberOrNull(stat.gamesStarted) || 0;
+  }
+
+  const appearanceCount = selected.length;
+  const denominatorStarts = gamesStarted > 0 ? gamesStarted : appearanceCount;
+
+  return {
+    appearanceCount,
+    gamesStarted,
+    inningsPitched: roundStat(inningsPitched, 2),
+    inningsPerAppearance: roundStat(inningsPitched / appearanceCount, 3),
+    inningsPerStart: roundStat(inningsPitched / denominatorStarts, 3),
+    era: inningsPitched > 0 ? roundStat((earnedRuns * 9) / inningsPitched, 3) : null,
+    whip: inningsPitched > 0 ? roundStat((hits + baseOnBalls) / inningsPitched, 3) : null,
+    strikeOuts,
+    baseOnBalls,
+    hits,
+    homeRuns,
+    runs,
+    earnedRuns,
+    kMinusBBPerInning:
+      inningsPitched > 0 ? roundStat((strikeOuts - baseOnBalls) / inningsPitched, 3) : null,
+    sample: {
+      requestedGames: limit,
+      usedGames: appearanceCount,
+      firstDate: getPitcherLogDate(selected[selected.length - 1]),
+      lastDate: getPitcherLogDate(selected[0])
+    }
+  };
+}
+
+function mapPitcherRecentForm(statsResponse, cutoffDate = null) {
+  const splits = getPitcherGameLogSplits(statsResponse, cutoffDate);
+
+  return {
+    source: "mlb_stats_gameLog",
+    cutoffDate: cutoffDate || null,
+    basis: "starts_before_game_date",
+    last3: aggregatePitcherGameLogSplits(splits, 3),
+    last5: aggregatePitcherGameLogSplits(splits, 5)
+  };
+}
 function mapPitcherStats(statsResponse) {
   const split = statsResponse?.stats?.[0]?.splits?.[0];
 
@@ -84,32 +265,44 @@ function buildTeamStatsMap(statsResponse, mapper) {
   return statsMap;
 }
 
-async function enrichProbablePitcher(probablePitcher, season) {
+async function enrichProbablePitcher(probablePitcher, season, gameDate = null) {
   if (!probablePitcher?.id) {
     return {
       id: null,
       fullName: null,
-      seasonStats: null
+      seasonStats: null,
+      recentForm: null
     };
   }
+
+  const scheduledEasternDate = gameDate ? getEasternDateFromIso(gameDate) : null;
+
+  let seasonStats = null;
+  let recentForm = null;
 
   try {
     const statsResponse = await fetchPitcherSeasonStats(probablePitcher.id, season);
-
-    return {
-      id: probablePitcher.id,
-      fullName: probablePitcher.fullName || null,
-      seasonStats: mapPitcherStats(statsResponse)
-    };
+    seasonStats = mapPitcherStats(statsResponse);
   } catch (error) {
-    return {
-      id: probablePitcher.id,
-      fullName: probablePitcher.fullName || null,
-      seasonStats: null
-    };
+    seasonStats = null;
   }
-}
 
+  if (typeof fetchPitcherGameLogStats === "function") {
+    try {
+      const recentFormResponse = await fetchPitcherGameLogStats(probablePitcher.id, season);
+      recentForm = mapPitcherRecentForm(recentFormResponse, scheduledEasternDate);
+    } catch (error) {
+      recentForm = null;
+    }
+  }
+
+  return {
+    id: probablePitcher.id,
+    fullName: probablePitcher.fullName || null,
+    seasonStats,
+    recentForm
+  };
+}
 function getTeamSeasonStats(teamId, hittingStatsMap, pitchingStatsMap) {
   if (!teamId) {
     return {
@@ -205,12 +398,14 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
 
   const awayProbablePitcher = await enrichProbablePitcher(
     awayTeam?.probablePitcher,
-    season
+    season,
+    game.gameDate
   );
 
   const homeProbablePitcher = await enrichProbablePitcher(
     homeTeam?.probablePitcher,
-    season
+    season,
+    game.gameDate
   );
 
   const doubleheaderMetadata = getRawDoubleheaderMetadata(game);
@@ -296,4 +491,10 @@ async function getGamesForDate(date) {
 module.exports = {
   getGamesForDate
 };
+
+
+
+
+
+
 
