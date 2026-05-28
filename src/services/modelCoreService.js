@@ -246,12 +246,18 @@ function buildStartingPitcherScore(starterStats, recentForm) {
   }
 
   const recentSampleWeight = getRecentStarterSampleWeight(recentForm);
+
   const rawRecentAdjustment =
     recentCompositeScore === null
       ? 0
       : (recentCompositeScore - seasonScore) * 0.3 * recentSampleWeight;
-  const recentAdjustment = clamp(rawRecentAdjustment, -0.25, 0.25);
-  const finalScore = seasonScore + recentAdjustment;
+
+  const shadowRecentAdjustment = clamp(rawRecentAdjustment, -0.25, 0.25);
+
+  // Shadow mode: calculate and track recent-form impact, but do not apply it
+  // to active picks until enough official graded samples exist.
+  const appliedRecentAdjustment = 0;
+  const finalScore = seasonScore + appliedRecentAdjustment;
 
   return {
     finalScore: roundNumber(finalScore, 3),
@@ -261,7 +267,9 @@ function buildStartingPitcherScore(starterStats, recentForm) {
     recentCompositeScore:
       recentCompositeScore === null ? null : roundNumber(recentCompositeScore, 3),
     recentSampleWeight,
-    recentAdjustment: roundNumber(recentAdjustment, 3),
+    recentAdjustment: roundNumber(appliedRecentAdjustment, 3),
+    recentShadowAdjustment: roundNumber(shadowRecentAdjustment, 3),
+    recentScoringMode: "shadow_only",
     recentFormVersion: STARTER_RECENT_FORM_VERSION
   };
 }
@@ -551,6 +559,7 @@ module.exports = {
   getConfidenceTier,
   getGameActionability
 };
+
 
 
 
