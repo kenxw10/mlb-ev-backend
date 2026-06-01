@@ -27,38 +27,38 @@ const COMPONENT_STATUS_CATALOG = [
   {
     componentKey: "bullpen_recent_form",
     label: "Bullpen recent form",
-    mode: "not_started",
+    mode: "shadow_only",
     activeImpact: false,
     evaluationThreshold: 75,
     metricPathPatterns: ["%bullpenrecentform%"],
-    notes: "Planned shadow-tracked bullpen/team pitching recent-form and usage interval."
+    notes: "Recent team pitching game logs are ingested as a bullpen/staff proxy and tracked in shadow mode with zero active pick impact."
   },
   {
     componentKey: "handedness_splits",
     label: "Handedness splits",
-    mode: "not_started",
+    mode: "shadow_only",
     activeImpact: false,
     evaluationThreshold: 100,
     metricPathPatterns: ["%handedness%"],
-    notes: "Planned split-based matchup context."
+    notes: "Team hitting and pitching splits versus left/right-handed opponents are ingested and tracked in shadow mode with zero active pick impact."
   },
   {
     componentKey: "weather",
     label: "Weather",
-    mode: "not_started",
+    mode: "shadow_only",
     activeImpact: false,
     evaluationThreshold: 100,
     metricPathPatterns: ["%weather%"],
-    notes: "Planned weather and run-environment context."
+    notes: "Venue and schedule run-environment metadata is tracked in shadow mode; true forecast data is not yet connected."
   },
   {
     componentKey: "lineup_injuries",
     label: "Lineup / injuries",
-    mode: "not_started",
+    mode: "shadow_only",
     activeImpact: false,
     evaluationThreshold: 100,
     metricPathPatterns: ["%lineup%", "%injur%"],
-    notes: "Planned lineup confirmation, scratches, and injury context."
+    notes: "MLB boxscore lineup data is ingested and tracked in shadow mode; injury source is currently unavailable."
   }
 ];
 

@@ -370,7 +370,9 @@ function buildMatchupReasoning(
   homeTeam,
   awayScoreCard,
   homeScoreCard,
-  dataQuality
+  dataQuality,
+  runEnvironment = null,
+  lineupInjuries = null
 ) {
   const offenseEdge = awayScoreCard.offenseScore - homeScoreCard.offenseScore;
   const teamPitchingEdge =
@@ -433,11 +435,25 @@ function buildMatchupReasoning(
           away: awayTeam?.teamRecentForm || null,
           home: homeTeam?.teamRecentForm || null
         },
-        bullpenRecentForm: null,
-        handednessSplits: null,
-        weather: null,
-        lineup: null,
-        injuries: null
+        bullpenRecentForm: {
+          away: awayTeam?.teamRecentForm?.pitching || null,
+          home: homeTeam?.teamRecentForm?.pitching || null
+        },
+        handednessSplits: {
+          away: awayTeam?.teamHandednessSplits || null,
+          home: homeTeam?.teamHandednessSplits || null
+        },
+        weather: runEnvironment || null,
+        lineup: {
+          source: lineupInjuries?.source || "mlb_boxscore",
+          away: lineupInjuries?.away || null,
+          home: lineupInjuries?.home || null
+        },
+        injuries: {
+          sourceStatus: lineupInjuries?.injurySourceStatus || "missing_injury_source",
+          away: lineupInjuries?.away?.injuries || null,
+          home: lineupInjuries?.home?.injuries || null
+        }
       }
     },
 

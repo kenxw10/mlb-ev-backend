@@ -154,14 +154,18 @@ function buildTotalsReasoning(
   homeScoreCard,
   dataQuality,
   projectedAwayRuns,
-  projectedHomeRuns
+  projectedHomeRuns,
+  runEnvironment = null,
+  lineupInjuries = null
 ) {
   const matchupReasoning = buildMatchupReasoning(
     awayTeam,
     homeTeam,
     awayScoreCard,
     homeScoreCard,
-    dataQuality
+    dataQuality,
+    runEnvironment,
+    lineupInjuries
   );
 
   return {
@@ -270,7 +274,9 @@ function evaluateGameTotals(game) {
     homeScoreCard,
     dataQuality,
     projectedAwayRuns,
-    projectedHomeRuns
+    projectedHomeRuns,
+    game.runEnvironment,
+    game.lineupInjuries
   );
 
   const linePairs = buildTotalsLinePairs(game.odds);

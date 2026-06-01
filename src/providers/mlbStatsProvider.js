@@ -91,12 +91,42 @@ async function fetchTeamSeasonStats(group, season) {
   return response.data;
 }
 
+async function fetchTeamStatSplits(teamId, group, season, sitCodes = "vl,vr") {
+  if (!teamId) {
+    return null;
+  }
+
+  const url = `${MLB_STATS_API_BASE_URL}/teams/${teamId}/stats`;
+  const response = await axios.get(url, {
+    params: {
+      stats: "statSplits",
+      group,
+      season,
+      sportId: 1,
+      sitCodes
+    },
+    timeout: 15000
+  });
+
+  return response.data;
+}
+async function fetchGameBoxscore(gamePk) {
+  if (!gamePk) {
+    return null;
+  }
+
+  const url = `${MLB_STATS_API_BASE_URL}/game/${gamePk}/boxscore`;
+  const response = await axios.get(url, { timeout: 15000 });
+  return response.data;
+}
 module.exports = {
+  fetchGameBoxscore,
   fetchScheduleForDate,
   fetchPitcherSeasonStats,
   fetchPitcherGameLogStats,
   fetchTeamSeasonStats,
-  fetchTeamGameLogStats
+  fetchTeamGameLogStats,
+  fetchTeamStatSplits
 };
 
 

@@ -1,9 +1,11 @@
 const {
   fetchScheduleForDate,
+  fetchGameBoxscore,
   fetchPitcherSeasonStats,
   fetchPitcherGameLogStats,
   fetchTeamSeasonStats,
-  fetchTeamGameLogStats
+  fetchTeamGameLogStats,
+  fetchTeamStatSplits
 } = require("../providers/mlbStatsProvider");
 const {
   getEasternDateFromIso,
@@ -344,6 +346,188 @@ function mapTeamRecentHittingForm(statsResponse, cutoffDate = null) {
     last14: aggregateTeamHittingGameLogSplits(splits, 14)
   };
 }
+function aggregateTeamPitchingGameLogSplits(splits, limit) {
+  const sample = splits.slice(0, limit);
+
+  if (sample.length === 0) {
+    return {
+      gameCount: 0,
+      lastDate: null,
+      inningsPitched: null,
+      inningsPerGame: null,
+      runs: null,
+      runsPerGame: null,
+      earnedRuns: null,
+      era: null,
+      hits: null,
+      hitsPerGame: null,
+      homeRuns: null,
+      homeRunsPerGame: null,
+      walks: null,
+      walksPerGame: null,
+      strikeouts: null,
+      strikeoutsPerGame: null,
+      kMinusBBPerInning: null,
+      whip: null,
+      battersFaced: null,
+      pitches: null,
+      pitchesPerGame: null,
+      saves: null,
+      holds: null,
+      blownSaves: null,
+      saveOpportunities: null,
+      saveConversionRate: null,
+      gamesFinished: null
+    };
+  }
+
+  let inningsPitched = 0;
+  let runs = 0;
+  let earnedRuns = 0;
+  let hits = 0;
+  let homeRuns = 0;
+  let walks = 0;
+  let strikeouts = 0;
+  let battersFaced = 0;
+  let pitches = 0;
+  let saves = 0;
+  let holds = 0;
+  let blownSaves = 0;
+  let saveOpportunities = 0;
+  let gamesFinished = 0;
+
+  for (const split of sample) {
+    const stat = split.stat || {};
+    const innings = parseBaseballInnings(stat.inningsPitched);
+
+    if (innings !== null) inningsPitched += innings;
+
+    runs += toNumberOrNull(stat.runs) || 0;
+    earnedRuns += toNumberOrNull(stat.earnedRuns) || 0;
+    hits += toNumberOrNull(stat.hits) || 0;
+    homeRuns += toNumberOrNull(stat.homeRuns) || 0;
+    walks += toNumberOrNull(stat.baseOnBalls) || 0;
+    strikeouts += toNumberOrNull(stat.strikeOuts) || 0;
+    battersFaced += toNumberOrNull(stat.battersFaced) || 0;
+    pitches += toNumberOrNull(stat.numberOfPitches) || 0;
+    saves += toNumberOrNull(stat.saves) || 0;
+    holds += toNumberOrNull(stat.holds) || 0;
+    blownSaves += toNumberOrNull(stat.blownSaves) || 0;
+    saveOpportunities += toNumberOrNull(stat.saveOpportunities) || 0;
+    gamesFinished += toNumberOrNull(stat.gamesFinished) || 0;
+  }
+
+  return {
+    gameCount: sample.length,
+    lastDate: sample[0]?.date || sample[0]?.game?.gameDate || null,
+    inningsPitched: roundStat(inningsPitched, 2),
+    inningsPerGame: divideOrNull(inningsPitched, sample.length, 3),
+    runs,
+    runsPerGame: divideOrNull(runs, sample.length, 3),
+    earnedRuns,
+    era: inningsPitched > 0 ? roundStat((earnedRuns * 9) / inningsPitched, 3) : null,
+    hits,
+    hitsPerGame: divideOrNull(hits, sample.length, 3),
+    homeRuns,
+    homeRunsPerGame: divideOrNull(homeRuns, sample.length, 3),
+    walks,
+    walksPerGame: divideOrNull(walks, sample.length, 3),
+    strikeouts,
+    strikeoutsPerGame: divideOrNull(strikeouts, sample.length, 3),
+    kMinusBBPerInning: divideOrNull(strikeouts - walks, inningsPitched, 3),
+    whip: inningsPitched > 0 ? roundStat((walks + hits) / inningsPitched, 3) : null,
+    battersFaced,
+    pitches,
+    pitchesPerGame: divideOrNull(pitches, sample.length, 3),
+    saves,
+    holds,
+    blownSaves,
+    saveOpportunities,
+    saveConversionRate: divideOrNull(saves, saveOpportunities, 3),
+    gamesFinished
+  };
+}
+
+function mapTeamRecentPitchingForm(statsResponse, cutoffDate = null) {
+  const splits = getTeamGameLogSplits(statsResponse, cutoffDate);
+
+  return {
+    source: "mlb_stats_team_gameLog",
+    cutoffDate: cutoffDate || null,
+    basis: "team_pitching_games_before_game_date_staff_bullpen_proxy",
+    last7: aggregateTeamPitchingGameLogSplits(splits, 7),
+    last14: aggregateTeamPitchingGameLogSplits(splits, 14)
+  };
+}
+
+function mapHandednessSplitStat(stat = {}, group = "hitting") {
+  const base = {
+    gamesPlayed: stat.gamesPlayed ?? null,
+    atBats: stat.atBats ?? null,
+    plateAppearances: stat.plateAppearances ?? null,
+    hits: stat.hits ?? null,
+    doubles: stat.doubles ?? null,
+    triples: stat.triples ?? null,
+    homeRuns: stat.homeRuns ?? null,
+    walks: stat.baseOnBalls ?? null,
+    strikeouts: stat.strikeOuts ?? null,
+    avg: stat.avg ?? null,
+    obp: stat.obp ?? null,
+    slg: stat.slg ?? null,
+    ops: stat.ops ?? null,
+    totalBases: stat.totalBases ?? null,
+    numberOfPitches: stat.numberOfPitches ?? null
+  };
+
+  if (group !== "pitching") {
+    return base;
+  }
+
+  const inningsPitched = parseBaseballInnings(stat.inningsPitched);
+
+  return {
+    ...base,
+    inningsPitched: inningsPitched !== null ? roundStat(inningsPitched, 2) : null,
+    battersFaced: stat.battersFaced ?? null,
+    whip: stat.whip ?? null,
+    strikeoutWalkRatio: stat.strikeoutWalkRatio ?? null,
+    strikeoutsPer9Inn: stat.strikeoutsPer9Inn ?? null,
+    walksPer9Inn: stat.walksPer9Inn ?? null,
+    hitsPer9Inn: stat.hitsPer9Inn ?? null,
+    homeRunsPer9: stat.homeRunsPer9 ?? null
+  };
+}
+
+function mapTeamHandednessSplitForm(statsResponse, group = "hitting") {
+  const splits = statsResponse?.stats?.[0]?.splits || [];
+  const output = {
+    source: "mlb_stats_statSplits",
+    basis: group === "pitching" ? "team_pitching_vs_batter_handedness" : "team_hitting_vs_pitcher_handedness",
+    vsLeft: null,
+    vsRight: null
+  };
+
+  for (const split of splits) {
+    const code = split?.split?.code || null;
+    const mapped = {
+      code,
+      description: split?.split?.description || null,
+      team: split?.team?.name || null,
+      stats: mapHandednessSplitStat(split?.stat || {}, group)
+    };
+
+    if (code === "vl") {
+      output.vsLeft = mapped;
+    }
+
+    if (code === "vr") {
+      output.vsRight = mapped;
+    }
+  }
+
+  return output;
+}
+
 function mapPitcherStats(statsResponse) {
   const split = statsResponse?.stats?.[0]?.splits?.[0];
 
@@ -476,22 +660,55 @@ function getTeamSeasonStats(teamId, hittingStatsMap, pitchingStatsMap) {
 async function getTeamRecentForm(teamId, season, cutoffDate = null) {
   if (!teamId || typeof fetchTeamGameLogStats !== "function") {
     return {
-      hitting: null
+      hitting: null,
+      pitching: null
     };
   }
 
   try {
-    const hittingResponse = await fetchTeamGameLogStats(teamId, "hitting", season);
+    const [hittingResponse, pitchingResponse] = await Promise.all([
+      fetchTeamGameLogStats(teamId, "hitting", season),
+      fetchTeamGameLogStats(teamId, "pitching", season)
+    ]);
 
     return {
-      hitting: mapTeamRecentHittingForm(hittingResponse, cutoffDate)
+      hitting: mapTeamRecentHittingForm(hittingResponse, cutoffDate),
+      pitching: mapTeamRecentPitchingForm(pitchingResponse, cutoffDate)
     };
   } catch (error) {
     return {
-      hitting: null
+      hitting: null,
+      pitching: null
     };
   }
 }
+
+async function getTeamHandednessSplits(teamId, season) {
+  if (!teamId || typeof fetchTeamStatSplits !== "function") {
+    return {
+      hitting: null,
+      pitching: null
+    };
+  }
+
+  try {
+    const [hittingResponse, pitchingResponse] = await Promise.all([
+      fetchTeamStatSplits(teamId, "hitting", season, "vl,vr"),
+      fetchTeamStatSplits(teamId, "pitching", season, "vl,vr")
+    ]);
+
+    return {
+      hitting: mapTeamHandednessSplitForm(hittingResponse, "hitting"),
+      pitching: mapTeamHandednessSplitForm(pitchingResponse, "pitching")
+    };
+  } catch (error) {
+    return {
+      hitting: null,
+      pitching: null
+    };
+  }
+}
+
 function mapTeamIdentity(teamWrapper) {
   const team = teamWrapper?.team || {};
 
@@ -565,6 +782,95 @@ function applyDoubleheaderFallbacks(games) {
   return games;
 }
 
+function normalizeBattingOrder(value) {
+  const parsed = toNumberOrNull(value);
+
+  if (parsed === null) {
+    return null;
+  }
+
+  return Math.floor(parsed / 100);
+}
+
+function mapLineupPlayer(entry) {
+  if (!entry?.battingOrder) {
+    return null;
+  }
+
+  return {
+    id: entry?.person?.id || null,
+    fullName: entry?.person?.fullName || null,
+    battingOrder: entry.battingOrder || null,
+    lineupSpot: normalizeBattingOrder(entry.battingOrder),
+    position: entry?.position?.abbreviation || null,
+    statusCode: entry?.status?.code || null,
+    statusDescription: entry?.status?.description || null,
+    isSubstitute: entry?.gameStatus?.isSubstitute === true,
+    isOnBench: entry?.gameStatus?.isOnBench === true,
+    allPositions: (entry?.allPositions || [])
+      .map((position) => position?.abbreviation)
+      .filter(Boolean)
+  };
+}
+
+function mapTeamLineupFromBoxscore(teamBoxscore) {
+  const players = Object.values(teamBoxscore?.players || {});
+  const battingOrderPlayers = players
+    .map(mapLineupPlayer)
+    .filter(Boolean)
+    .sort((a, b) => String(a.battingOrder).localeCompare(String(b.battingOrder)));
+
+  const starters = battingOrderPlayers.filter((player) => !player.isSubstitute);
+  const substitutes = battingOrderPlayers.filter((player) => player.isSubstitute);
+
+  return {
+    source: "mlb_boxscore",
+    sourceStatus: battingOrderPlayers.length > 0 ? "available" : "not_available",
+    teamName: teamBoxscore?.team?.name || null,
+    lineupConfirmed: starters.length >= 9,
+    starterCount: starters.length,
+    substituteCount: substitutes.length,
+    battingOrderCount: battingOrderPlayers.length,
+    starters,
+    substitutes,
+    injuries: {
+      source: null,
+      sourceStatus: "missing_injury_source",
+      injuryAvailable: false,
+      players: []
+    }
+  };
+}
+
+function buildLineupInjuryContext(boxscore) {
+  return {
+    source: "mlb_boxscore",
+    injurySourceStatus: "missing_injury_source",
+    away: mapTeamLineupFromBoxscore(boxscore?.teams?.away),
+    home: mapTeamLineupFromBoxscore(boxscore?.teams?.home)
+  };
+}
+function buildRunEnvironmentContext(game) {
+  return {
+    source: "mlb_schedule",
+    sourceStatus: "missing_weather_source",
+    weatherAvailable: false,
+    basis: "venue_and_schedule_metadata_only_no_forecast",
+    venueId: game?.venue?.id || null,
+    venueName: game?.venue?.name || null,
+    gameDate: game?.gameDate || null,
+    scheduledEasternDate: game?.gameDate ? getEasternDateFromIso(game.gameDate) : null,
+    scheduledEasternTime: game?.gameDate ? getEasternTimeFromIso(game.gameDate) : null,
+    roofType: null,
+    temperatureF: null,
+    windSpeedMph: null,
+    windDirection: null,
+    precipitationProbability: null,
+    humidity: null,
+    runEnvironmentAdjustment: 0
+  };
+}
+
 async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
   const awayTeam = game.teams?.away;
   const homeTeam = game.teams?.home;
@@ -585,10 +891,39 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
 
   const doubleheaderMetadata = getRawDoubleheaderMetadata(game);
   const teamRecentFormCutoffDate = game?.gameDate ? getEasternDateFromIso(game.gameDate) : null;
-  const [awayTeamRecentForm, homeTeamRecentForm] = await Promise.all([
+  const [
+    awayTeamRecentForm,
+    homeTeamRecentForm,
+    awayTeamHandednessSplits,
+    homeTeamHandednessSplits
+  ] = await Promise.all([
     getTeamRecentForm(awayIdentity.id, season, teamRecentFormCutoffDate),
-    getTeamRecentForm(homeIdentity.id, season, teamRecentFormCutoffDate)
+    getTeamRecentForm(homeIdentity.id, season, teamRecentFormCutoffDate),
+    getTeamHandednessSplits(awayIdentity.id, season),
+    getTeamHandednessSplits(homeIdentity.id, season)
   ]);
+
+  let lineupInjuryContext = {
+    source: "mlb_boxscore",
+    sourceStatus: "not_requested",
+    injurySourceStatus: "missing_injury_source",
+    away: null,
+    home: null
+  };
+
+  try {
+    const boxscore = await fetchGameBoxscore(game.gamePk);
+    lineupInjuryContext = buildLineupInjuryContext(boxscore);
+  } catch (error) {
+    lineupInjuryContext = {
+      source: "mlb_boxscore",
+      sourceStatus: "error",
+      error: error.message || null,
+      injurySourceStatus: "missing_injury_source",
+      away: null,
+      home: null
+    };
+  }
 
   return {
     gamePk: game.gamePk,
@@ -602,6 +937,8 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
     doubleheaderLabel: doubleheaderMetadata.doubleheaderLabel,
     status: game.status?.detailedState || null,
     venueName: game.venue?.name || null,
+    runEnvironment: buildRunEnvironmentContext(game),
+    lineupInjuries: lineupInjuryContext,
     awayTeam: {
       ...awayIdentity,
       probablePitcher: awayProbablePitcher,
@@ -610,7 +947,8 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
         hittingStatsMap,
         pitchingStatsMap
       ),
-      teamRecentForm: awayTeamRecentForm
+      teamRecentForm: awayTeamRecentForm,
+      teamHandednessSplits: awayTeamHandednessSplits
     },
     homeTeam: {
       ...homeIdentity,
@@ -620,7 +958,8 @@ async function mapGame(game, season, hittingStatsMap, pitchingStatsMap) {
         hittingStatsMap,
         pitchingStatsMap
       ),
-      teamRecentForm: homeTeamRecentForm
+      teamRecentForm: homeTeamRecentForm,
+      teamHandednessSplits: homeTeamHandednessSplits
     }
   };
 }

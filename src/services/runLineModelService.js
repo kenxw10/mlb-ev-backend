@@ -220,7 +220,9 @@ function evaluateGameRunLine(game) {
     game.homeTeam,
     awayScoreCard,
     homeScoreCard,
-    dataQuality
+    dataQuality,
+    game.runEnvironment,
+    game.lineupInjuries
   );
 
   const awayBestPrice = getBestRunLinePriceForTeam(
