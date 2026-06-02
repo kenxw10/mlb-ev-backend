@@ -1,14 +1,14 @@
-const STAKE_RECOMMENDATION_VERSION = "provisional-v1";
+const STAKE_RECOMMENDATION_VERSION = "risk-capped-v2";
 
 const STAKE_CONFIG = {
   moneyline: {
     enabled: true,
     minEv: 0.03,
     minEdge: 0.025,
+    maxUnits: 0.5,
+    riskPolicy: "market_capped_until_positive_tracked_roi",
     tiers: [
-      { units: 1.0, minEv: 0.10, minEdge: 0.075, label: "max_provisional" },
-      { units: 0.75, minEv: 0.07, minEdge: 0.055, label: "strong" },
-      { units: 0.5, minEv: 0.05, minEdge: 0.04, label: "standard" },
+      { units: 0.5, minEv: 0.08, minEdge: 0.06, label: "strong_capped" },
       { units: 0.25, minEv: 0.03, minEdge: 0.025, label: "small" }
     ]
   },
@@ -16,10 +16,10 @@ const STAKE_CONFIG = {
     enabled: true,
     minEv: 0.05,
     minEdge: 0.04,
+    maxUnits: 0.5,
+    riskPolicy: "higher_variance_market_capped_until_positive_tracked_roi",
     tiers: [
-      { units: 1.0, minEv: 0.12, minEdge: 0.09, label: "max_provisional" },
-      { units: 0.75, minEv: 0.09, minEdge: 0.07, label: "strong" },
-      { units: 0.5, minEv: 0.07, minEdge: 0.055, label: "standard" },
+      { units: 0.5, minEv: 0.15, minEdge: 0.10, label: "extreme_edge_capped" },
       { units: 0.25, minEv: 0.05, minEdge: 0.04, label: "small" }
     ]
   },
@@ -27,6 +27,8 @@ const STAKE_CONFIG = {
     enabled: false,
     minEv: null,
     minEdge: null,
+    maxUnits: 0.25,
+    riskPolicy: "disabled_until_totals_calibration_active",
     tiers: []
   }
 };
